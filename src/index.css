@@ -1,5 +1,59 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: var(--bg-main);
+  --color-sidebar: var(--bg-sidebar);
+  --color-surface: var(--bg-surface);
+  --color-card: var(--bg-card);
+  --color-border-subtle: var(--border-subtle);
+  --color-primary: var(--color-primary);
+  --color-accent: var(--color-accent);
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  
+  --radius-xl: 24px;
+}
+
+:root {
+  /* LIGHT THEME (Default) */
+  --bg-main: #F6F7FB;
+  --bg-sidebar: #FFFFFF;
+  --bg-surface: #F3F4F6;
+  --bg-card: #FFFFFF;
+  --border-subtle: #E5E7EB;
+  --text-main: #111827;
+  --text-muted: #6B7280;
+  --color-primary: #4F7CFF;
+  --color-accent: #4F7CFF;
+}
+
+.dark {
+  /* DARK THEME */
+  --bg-main: #09090B;
+  --bg-sidebar: #111217;
+  --bg-surface: #17181D;
+  --bg-card: #1D1E24;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text-main: #F9FAFB;
+  --text-muted: #9CA3AF;
+  --color-primary: #4F7CFF;
+  --color-accent: #4F7CFF;
+}
+
+.amoled {
+  /* AMOLED BLACK THEME */
+  --bg-main: #000000;
+  --bg-sidebar: #000000;
+  --bg-surface: #050505;
+  --bg-card: #0A0A0A;
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --text-main: #F9FAFB;
+  --text-muted: #6B7280;
+  --color-primary: #4F7CFF;
+  --color-accent: #4F7CFF;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -12,9 +66,11 @@ body,
 }
 
 body {
-  font-family: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", "SF Pro Display", "Manrope", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  @apply bg-[#FBF6EE] text-[#26211B] dark:bg-[#12181A] dark:text-[#F2ECDF];
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */

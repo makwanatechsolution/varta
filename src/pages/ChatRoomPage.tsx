@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, ImageIcon, Smile, X, Reply as ReplyIcon, Edit2 } from "lucide-react";
+import { ArrowLeft, Phone, Video, Send, ImageIcon, Smile, X, Reply as ReplyIcon, Edit2, MessageCircle, Plus } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useMessages, useTyping } from "../hooks/useChat";
 import { useCalling } from "../hooks/useCalling";
@@ -11,6 +11,8 @@ import { VoiceRecorder } from "../components/chat/VoiceRecorder";
 import { TypingIndicatorBubble } from "../components/chat/TypingIndicatorBubble";
 import { IncomingCallScreen, ActiveCallOverlay } from "../components/calls/CallUI";
 import { Avatar } from "../components/ui/Avatar";
+import EmojiPicker, { Theme } from "emoji-picker-react";
+import type { EmojiClickData } from "emoji-picker-react";
 import type { GifResult, Message, Conversation, Profile } from "../types/database";
 import { supabase } from "../lib/supabase";
 import clsx from "clsx";
@@ -133,13 +135,11 @@ export function ChatRoomPage() {
 
   const cancelEdit = () => { setEditingMsg(null); setEditText(""); };
 
-  const QUICK_EMOJIS = ["😀","❤️","😂","🔥","👍","🎉"];
-
   return (
-    <div className="flex h-screen flex-col bg-[#0b141a]">
+    <div className="flex h-screen flex-col bg-background relative z-0 overflow-hidden">
       {/* Header */}
-      <header className="flex items-center gap-3 bg-[#111b21] px-4 py-3">
-        <Link to="/" className="md:hidden text-zinc-400 hover:text-white">
+      <header className="flex items-center gap-3 bg-surface/80 backdrop-blur-xl px-4 py-3 shadow-sm border-b border-border-subtle z-10 sticky top-0">
+        <Link to="/" className="md:hidden text-muted hover:text-main transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </Link>
 
@@ -154,33 +154,38 @@ export function ChatRoomPage() {
         )}
 
         <div className="flex-1 min-w-0">
-          <p className="truncate font-medium text-white">{title}</p>
-          <p className="text-xs text-zinc-500">
+          <p className="truncate font-semibold text-main">{title}</p>
+          <p className="text-xs text-muted transition-colors">
             {typingUsers.length > 0
-              ? typingText
+              ? <span className="text-primary font-medium">{typingText}</span>
               : conv?.type === "group"
               ? `${conv.members?.length ?? 0} members`
               : otherUser?.presence === "online"
-              ? <span className="text-[#1E88C7]">online</span>
+              ? <span className="text-primary font-medium">online</span>
               : "tap for info"}
           </p>
         </div>
 
-        <button type="button" onClick={() => startCall("voice")} className="rounded-full p-2 hover:bg-zinc-800">
-          <Phone className="h-5 w-5 text-[#1E88C7]" />
+        <button type="button" onClick={() => startCall("voice")} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors">
+          <Phone className="h-5 w-5" />
         </button>
-        <button type="button" onClick={() => startCall("video")} className="rounded-full p-2 hover:bg-zinc-800">
-          <Video className="h-5 w-5 text-[#1E88C7]" />
+        <button type="button" onClick={() => startCall("video")} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors">
+          <Video className="h-5 w-5" />
         </button>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
-        {loading && <p className="text-center text-sm text-zinc-500">Loading messages...</p>}
+      <div className="flex-1 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide scroll-smooth">
+        {loading && (
+          <div className="flex justify-center p-4">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        )}
         {!loading && messages.length === 0 && (
-          <p className="text-center text-sm text-zinc-500 mt-8">
-            No messages yet. Say hello! 👋
-          </p>
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-muted opacity-60">
+            <MessageCircle className="h-12 w-12" />
+            <p className="text-sm font-medium">No messages yet. Say hello! 👋</p>
+          </div>
         )}
         {messages.map((msg) => (
           <MessageBubble
@@ -193,117 +198,133 @@ export function ChatRoomPage() {
           />
         ))}
         {typingUsers.length > 0 && (
-          <div className="px-4">
+          <div className="px-2">
             <TypingIndicatorBubble />
           </div>
         )}
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className="h-2" />
       </div>
 
       {/* Composer */}
-      <div className="relative border-t border-zinc-800 bg-[#111b21]">
+      <div className="relative border-t border-border-subtle bg-surface/90 backdrop-blur-md px-2 py-2">
         {/* GIF picker */}
         <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGif} />
 
-        {/* Quick emoji bar for composer */}
+        {/* Full emoji picker */}
         {showEmojiComposer && (
-          <div className="absolute bottom-full left-0 mb-1 flex gap-1 rounded-full bg-[#202c33] px-3 py-2 shadow-lg">
-            {QUICK_EMOJIS.map((e) => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => { setText((prev) => prev + e); setShowEmojiComposer(false); }}
-                className="text-xl hover:scale-125 transition-transform"
-              >
-                {e}
-              </button>
-            ))}
-            <button type="button" onClick={() => setShowEmojiComposer(false)}>
-              <X className="h-4 w-4 text-zinc-400" />
-            </button>
+          <div className="absolute bottom-full left-2 mb-2 z-50 shadow-2xl rounded-2xl overflow-hidden border border-border-subtle">
+            <EmojiPicker
+              theme={Theme.DARK}
+              onEmojiClick={(emojiData: EmojiClickData) => {
+                setText((prev) => prev + emojiData.emoji);
+              }}
+            />
           </div>
         )}
 
         {/* Reply preview */}
         {replyTo && (
-          <div className="flex items-center gap-2 border-b border-zinc-700 px-4 py-2">
-            <ReplyIcon className="h-4 w-4 text-[#1E88C7] shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-[#1E88C7]">{replyTo.sender?.display_name ?? "Message"}</p>
-              <p className="truncate text-xs text-zinc-400">
+          <div className="flex items-center gap-3 border-b border-border-subtle bg-card rounded-t-2xl px-4 py-3 mx-2 mt-[-8px] shadow-sm">
+            <ReplyIcon className="h-4 w-4 text-primary shrink-0" />
+            <div className="min-w-0 flex-1 border-l-2 border-primary pl-2">
+              <p className="text-xs font-semibold text-primary">{replyTo.sender?.display_name ?? "Message"}</p>
+              <p className="truncate text-xs text-muted">
                 {replyTo.type === "gif" ? "GIF" : replyTo.content}
               </p>
             </div>
-            <button type="button" onClick={() => setReplyTo(null)}>
-              <X className="h-4 w-4 text-zinc-500 hover:text-white" />
+            <button type="button" onClick={() => setReplyTo(null)} className="rounded-full p-1 hover:bg-surface transition-colors">
+              <X className="h-4 w-4 text-muted hover:text-main" />
             </button>
           </div>
         )}
 
         {/* Edit mode banner */}
         {editingMsg && (
-          <div className="flex items-center gap-2 border-b border-zinc-700 bg-[#1a2a35] px-4 py-2">
-            <Edit2 className="h-4 w-4 text-amber-400 shrink-0" />
-            <span className="flex-1 text-xs text-amber-400">Editing message</span>
-            <button type="button" onClick={cancelEdit}>
-              <X className="h-4 w-4 text-zinc-500 hover:text-white" />
+          <div className="flex items-center gap-3 border-b border-border-subtle bg-warning/10 rounded-t-2xl px-4 py-3 mx-2 mt-[-8px]">
+            <Edit2 className="h-4 w-4 text-warning shrink-0" />
+            <span className="flex-1 text-xs font-medium text-warning">Editing message</span>
+            <button type="button" onClick={cancelEdit} className="rounded-full p-1 hover:bg-warning/20 transition-colors">
+              <X className="h-4 w-4 text-warning hover:text-warning" />
             </button>
           </div>
         )}
 
-        <div className="flex items-center gap-2 p-3 relative overflow-hidden">
+        <div className="flex items-end gap-2 p-1 relative overflow-hidden">
           {!isVoiceRecording && (
-            <>
-              <button type="button" onClick={() => setShowEmojiComposer(!showEmojiComposer)} className="rounded-full p-2 hover:bg-zinc-800">
-                <Smile className="h-5 w-5 text-zinc-400" />
+            <div className="flex items-center gap-1 mb-1 shrink-0">
+              <button type="button" onClick={() => setShowEmojiComposer(!showEmojiComposer)} className="rounded-full p-2 text-muted hover:text-main hover:bg-card transition-colors">
+                <Smile className="h-6 w-6" />
               </button>
-              <button type="button" onClick={() => setGifOpen(true)} className="rounded-full p-2 hover:bg-zinc-800">
-                <ImageIcon className="h-5 w-5 text-zinc-400" />
+              <button type="button" onClick={() => setGifOpen(true)} className="rounded-full p-2 text-muted hover:text-main hover:bg-card transition-colors">
+                <ImageIcon className="h-6 w-6" />
               </button>
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full p-2 hover:bg-zinc-800">
-                <svg className="h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full p-2 text-muted hover:text-main hover:bg-card transition-colors">
+                <Plus className="h-6 w-6" />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-              <input
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+          
+          {!isVoiceRecording ? (
+            <div className="flex-1 relative">
+              <textarea
                 value={editingMsg ? editText : text}
                 onChange={(e) => {
                   if (editingMsg) setEditText(e.target.value);
                   else { setText(e.target.value); sendTyping(); }
                 }}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder={editingMsg ? "Edit message..." : "Type a message"}
-                className="flex-1 rounded-full bg-[#202c33] px-4 py-2 text-sm text-white outline-none placeholder:text-zinc-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={editingMsg ? "Edit message..." : "Message"}
+                rows={1}
+                className="w-full resize-none rounded-2xl bg-card border border-border-subtle px-4 py-3 text-sm text-main outline-none placeholder:text-muted focus:ring-2 focus:ring-primary/20 transition-shadow max-h-32 scrollbar-hide"
               />
-            </>
-          )}
-
-          {editingMsg || text.trim() ? (
-            <button
-              type="button"
-              onClick={handleSend}
-              className={clsx(
-                "rounded-full p-2 disabled:opacity-40 transition-all shrink-0",
-                editingMsg ? "bg-amber-500" : "bg-[#1E88C7]",
-              )}
-            >
-              <Send className="h-5 w-5 text-white" />
-            </button>
+            </div>
           ) : (
             <VoiceRecorder
               onSend={handleVoiceSend}
               onCancel={() => setIsVoiceRecording(false)}
               onRecordingChange={setIsVoiceRecording}
-              className={isVoiceRecording ? "flex-1" : ""}
+              className="flex-1 mb-1"
             />
           )}
+
+          <div className="shrink-0 mb-1">
+            {editingMsg || text.trim() ? (
+              <button
+                type="button"
+                onClick={handleSend}
+                className={clsx(
+                  "rounded-full p-3 shadow-md transition-transform hover:scale-105 active:scale-95",
+                  editingMsg ? "bg-warning text-white" : "bg-primary text-white",
+                )}
+              >
+                <Send className="h-5 w-5" />
+              </button>
+            ) : (
+              !isVoiceRecording && (
+                <button
+                  type="button"
+                  onClick={() => setIsVoiceRecording(true)}
+                  className="rounded-full p-3 bg-primary text-white shadow-md transition-transform hover:scale-105 active:scale-95"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                </button>
+              )
+            )}
+          </div>
         </div>
       </div>
 

@@ -20,7 +20,7 @@ export function VoicePlayer({ url, isOwn }: VoicePlayerProps) {
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
   useEffect(() => {
     let isMounted = true;

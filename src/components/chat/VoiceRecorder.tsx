@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Mic, Send, Trash2, Lock, Square } from "lucide-react";
+import { Mic, Send, Trash2, Lock } from "lucide-react";
 import clsx from "clsx";
 
 interface VoiceRecorderProps {
@@ -17,7 +17,7 @@ export function VoiceRecorder({ onSend, onCancel, onRecordingChange, className }
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
-  const timerRef = useRef<number>();
+  const timerRef = useRef<number>(0);
   
   // Gesture tracking
   const startPos = useRef({ x: 0, y: 0 });

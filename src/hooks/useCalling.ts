@@ -133,6 +133,9 @@ export function useCalling(conversationId: string | undefined) {
           if (sig.signal_type === "answer" && role === "initiator") {
             if (pc.signalingState === "have-local-offer") {
               await pc.setRemoteDescription(new RTCSessionDescription(sig.payload as unknown as RTCSessionDescriptionInit));
+              import("../lib/audio").then((m) => m.callAudio.stop());
+              // Update active call so the timer starts for the caller!
+              setActiveCall((prev) => prev ? { ...prev, status: "active", answered_at: new Date().toISOString() } : null);
             }
           }
 
@@ -159,6 +162,11 @@ export function useCalling(conversationId: string | undefined) {
   useEffect(() => {
     if (!user) return;
 
+    // Request notification permission if not granted
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
     const channel = supabase
       .channel(`calls_incoming:${user.id}`)
       .on(
@@ -166,7 +174,6 @@ export function useCalling(conversationId: string | undefined) {
         { event: "INSERT", schema: "public", table: "calls" },
         async (payload) => {
           const call = payload.new as Call;
-          // Check if I am a participant in this conversation
           if (call.status === "ringing" && call.initiator_id !== user.id && call.conversation_id) {
             const { data: membership } = await supabase
               .from("conversation_members")
@@ -177,9 +184,25 @@ export function useCalling(conversationId: string | undefined) {
 
             if (membership) {
               setIncomingCall(call);
+              
+              // Play ringtone
+              import("../lib/audio").then((m) => m.callAudio.playIncomingRing());
 
-              // Auto-miss after 30s if not answered
+              // Send Notification
+              if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+                const notif = new Notification("Incoming Call", {
+                  body: call.type === "video" ? "Incoming Video Call" : "Incoming Voice Call",
+                  icon: "/vite.svg"
+                });
+                notif.onclick = () => {
+                  window.focus();
+                  notif.close();
+                };
+              }
+
+              // Auto-miss after 30s
               const timer = window.setTimeout(async () => {
+                import("../lib/audio").then((m) => m.callAudio.stop());
                 setIncomingCall((prev) => {
                   if (prev?.id === call.id) {
                     supabase.from("calls").update({ status: "missed" }).eq("id", call.id);
@@ -192,6 +215,21 @@ export function useCalling(conversationId: string | undefined) {
             }
           }
         },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "calls" },
+        (payload) => {
+          // If the caller cancelled the call
+          setIncomingCall((prev) => {
+            if (prev && prev.id === payload.new.id && payload.new.status !== "ringing") {
+              import("../lib/audio").then((m) => m.callAudio.stop());
+              if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
+              return null;
+            }
+            return prev;
+          });
+        }
       )
       .subscribe();
 
@@ -235,6 +273,8 @@ export function useCalling(conversationId: string | undefined) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    import("../lib/audio").then((m) => m.callAudio.playOutgoingRing());
+
     await supabase.from("call_signals").insert({
       call_id: call.id,
       from_user_id: user.id,
@@ -246,6 +286,7 @@ export function useCalling(conversationId: string | undefined) {
     ringTimerRef.current = window.setTimeout(async () => {
       const cur = activeCallRef.current;
       if (cur?.id === call.id && cur.status === "ringing") {
+        import("../lib/audio").then((m) => m.callAudio.stop());
         await supabase.from("calls").update({ status: "missed" }).eq("id", call.id);
         await _insertCallLog(conversationId, call.id, "missed", type);
         stream.getTracks().forEach((t) => t.stop());
@@ -261,6 +302,8 @@ export function useCalling(conversationId: string | undefined) {
   const acceptCall = async () => {
     if (!incomingCall || !user) return;
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
+    
+    import("../lib/audio").then((m) => m.callAudio.stop());
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -307,6 +350,7 @@ export function useCalling(conversationId: string | undefined) {
   const declineCall = async () => {
     if (!incomingCall) return;
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
+    import("../lib/audio").then((m) => m.callAudio.stop());
     await supabase.from("calls").update({ status: "declined", ended_at: new Date().toISOString() }).eq("id", incomingCall.id);
     setIncomingCall(null);
   };
@@ -315,6 +359,7 @@ export function useCalling(conversationId: string | undefined) {
 
   const endCall = async () => {
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
+    import("../lib/audio").then((m) => m.callAudio.stop());
 
     const call = activeCallRef.current;
     if (call) {

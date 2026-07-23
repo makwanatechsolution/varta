@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Phone, PhoneOff, Video, Mic, MicOff, VideoOff } from "lucide-react";
 import type { Call } from "../../types/database";
+import { motion } from "framer-motion";
 
 // ─── Incoming call screen ─────────────────────────────────────────────────────
 
@@ -21,59 +22,64 @@ export function IncomingCallScreen({ call, callerName, onAccept, onDecline }: In
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#111b21]/95 backdrop-blur-sm py-16">
-      <div className="flex flex-col items-center gap-4">
-        <p className="text-xs uppercase tracking-widest text-zinc-500">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-background/95 backdrop-blur-3xl py-20"
+    >
+      <div className="flex flex-col items-center gap-4 mt-10">
+        <p className="text-sm font-semibold uppercase tracking-widest text-primary">
           {call.type === "video" ? "Incoming video call" : "Incoming voice call"}
         </p>
-        <h2 className="text-3xl font-semibold text-white">{callerName}</h2>
+        <h2 className="text-4xl font-light tracking-tight text-main">{callerName}</h2>
 
         {/* Pulsing rings */}
-        <div className="relative mt-4 flex h-32 w-32 items-center justify-center">
+        <div className="relative mt-12 flex h-32 w-32 items-center justify-center">
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="absolute rounded-full border border-[#1E88C7] transition-all duration-700"
+              className="absolute rounded-full border border-primary transition-all duration-700 ease-out"
               style={{
-                width: `${80 + i * 24}px`,
-                height: `${80 + i * 24}px`,
-                opacity: ring === i ? 0.6 : 0.15,
+                width: `${80 + i * 40}px`,
+                height: `${80 + i * 40}px`,
+                opacity: ring === i ? 0.4 : 0.05,
               }}
             />
           ))}
-          <div className="h-20 w-20 rounded-full bg-[#1E88C7]/20 flex items-center justify-center">
+          <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center shadow-lg shadow-primary/20 backdrop-blur-sm">
             {call.type === "video" ? (
-              <Video className="h-8 w-8 text-[#1E88C7]" />
+              <Video className="h-8 w-8 text-primary" />
             ) : (
-              <Phone className="h-8 w-8 text-[#1E88C7]" />
+              <Phone className="h-8 w-8 text-primary" />
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex gap-16">
-        <div className="flex flex-col items-center gap-2">
+      <div className="flex gap-20 mb-10">
+        <div className="flex flex-col items-center gap-3">
           <button
             type="button"
             onClick={onDecline}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600 transition-colors"
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-error text-white shadow-xl shadow-error/20 hover:scale-110 active:scale-95 transition-all"
           >
             <PhoneOff className="h-7 w-7" />
           </button>
-          <span className="text-xs text-zinc-400">Decline</span>
+          <span className="text-sm font-medium text-muted">Decline</span>
         </div>
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-3">
           <button
             type="button"
             onClick={onAccept}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1E88C7] text-white shadow-lg hover:bg-[#1971A5] transition-colors animate-bounce"
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-success text-white shadow-xl shadow-success/20 hover:scale-110 active:scale-95 transition-all animate-bounce"
           >
             {call.type === "video" ? <Video className="h-7 w-7" /> : <Phone className="h-7 w-7" />}
           </button>
-          <span className="text-xs text-zinc-400">Accept</span>
+          <span className="text-sm font-medium text-muted">Accept</span>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -121,42 +127,59 @@ export function ActiveCallOverlay({
   }, [duration]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#0b141a]">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.3 }}
+      className="fixed inset-0 z-50 flex flex-col bg-background/90 backdrop-blur-3xl overflow-hidden"
+    >
       {/* Video area */}
-      <div className="relative flex-1 bg-black">
+      <div className="relative flex-1 bg-black/40 rounded-b-[40px] shadow-2xl overflow-hidden m-2 border border-border-subtle">
         {isVideo && remoteStream ? (
           <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center flex-col gap-4">
-            <div className="h-32 w-32 rounded-full bg-zinc-800 flex items-center justify-center text-5xl">
-              {callerName?.[0]?.toUpperCase() ?? "?"}
+          <div className="flex h-full items-center justify-center flex-col gap-6">
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-full bg-primary/20 blur-xl animate-pulse" />
+              <div className="relative h-36 w-36 rounded-full bg-gradient-to-br from-surface to-card border border-border-subtle flex items-center justify-center text-5xl font-light text-main shadow-2xl">
+                {callerName?.[0]?.toUpperCase() ?? "?"}
+              </div>
             </div>
-            <p className="text-xl font-medium text-white">{callerName}</p>
-            <p className="text-sm text-zinc-500">{elapsed}</p>
+            <div className="text-center">
+              <p className="text-2xl font-light tracking-wide text-main mb-2">{callerName}</p>
+              <p className="text-lg font-mono tracking-widest text-primary">{elapsed}</p>
+            </div>
           </div>
         )}
 
         {/* Local video PiP */}
         {isVideo && localStream && !isVideoOff && (
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="absolute bottom-4 right-4 h-36 w-28 rounded-xl object-cover ring-2 ring-[#1E88C7]/30 shadow-xl"
-          />
+          <motion.div
+            initial={{ opacity: 0, x: 20, y: 20 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            className="absolute bottom-6 right-6 h-48 w-32 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl"
+          >
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="h-full w-full object-cover bg-black"
+            />
+          </motion.div>
         )}
 
         {/* Duration overlay for video */}
         {isVideo && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1 text-sm text-white backdrop-blur-sm">
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-6 py-2 text-sm font-mono tracking-widest text-white backdrop-blur-md border border-white/10 shadow-lg">
             {elapsed}
           </div>
         )}
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-5 bg-[#111b21] py-8">
+      <div className="flex items-center justify-center gap-8 py-8 px-6 pb-12">
         <CallButton onClick={onToggleMute} active={isMuted} danger={false} label={isMuted ? "Unmute" : "Mute"}>
           {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
         </CallButton>
@@ -171,7 +194,7 @@ export function ActiveCallOverlay({
           <PhoneOff className="h-7 w-7" />
         </CallButton>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -185,17 +208,21 @@ function CallButton({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-2">
       <button
         type="button"
         onClick={onClick}
-        className={`flex h-14 w-14 items-center justify-center rounded-full text-white transition-all hover:scale-105 ${
-          danger ? "bg-red-500 hover:bg-red-600" : active ? "bg-zinc-600" : "bg-zinc-800 hover:bg-zinc-700"
+        className={`flex h-16 w-16 items-center justify-center rounded-full text-white transition-all shadow-lg hover:scale-110 active:scale-95 ${
+          danger 
+            ? "bg-error shadow-error/30 hover:bg-red-600" 
+            : active 
+              ? "bg-surface border border-border-subtle text-main" 
+              : "bg-surface/50 border border-border-subtle text-muted hover:bg-surface hover:text-main"
         }`}
       >
         {children}
       </button>
-      <span className="text-[10px] text-zinc-500">{label}</span>
+      <span className="text-[11px] font-medium tracking-wide text-muted">{label}</span>
     </div>
   );
 }

@@ -23,9 +23,11 @@ export function Avatar({ src, name, size = "md", presence, showRing, storyUnseen
   const sizes = { sm: "h-8 w-8 text-xs", md: "h-10 w-10 text-sm", lg: "h-14 w-14 text-base" };
   const initials = name.slice(0, 2).toUpperCase();
 
+  const Component = onClick ? "button" : "div";
+
   return (
-    <button
-      type="button"
+    <Component
+      type={onClick ? "button" : undefined}
       onClick={onClick}
       className={clsx("relative shrink-0 rounded-full", onClick && "cursor-pointer")}
     >
@@ -48,7 +50,7 @@ export function Avatar({ src, name, size = "md", presence, showRing, storyUnseen
       >
         {src ? <img src={src} alt={name} className="h-full w-full object-cover" /> : initials}
       </span>
-    </button>
+    </Component>
   );
 }
 

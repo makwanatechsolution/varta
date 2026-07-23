@@ -198,39 +198,59 @@ export async function createDirectConversation(otherUserId: string, myUserId: st
     if (directMatch) return { id: (directMatch as any).conversation_id as string };
   }
 
-  const { data: conv, error } = await supabase
+  const convId = crypto.randomUUID();
+
+  const { error } = await supabase
     .from("conversations")
-    .insert({ type: "direct", created_by: myUserId })
-    .select()
-    .single();
+    .insert({ id: convId, type: "direct", created_by: myUserId });
 
-  if (error || !conv) throw error;
+  if (error) throw error;
 
-  await supabase.from("conversation_members").insert([
-    { conversation_id: conv.id, user_id: myUserId, role: "owner" },
-    { conversation_id: conv.id, user_id: otherUserId, role: "member" },
-  ]);
+  // Insert owner first to satisfy RLS for adding other members
+  await supabase.from("conversation_members").insert({
+    conversation_id: convId,
+    user_id: myUserId,
+    role: "owner"
+  });
+  
+  // Then insert the other member
+  await supabase.from("conversation_members").insert({
+    conversation_id: convId,
+    user_id: otherUserId,
+    role: "member"
+  });
 
-  return conv;
+  return { id: convId };
 }
 
 export async function createGroupConversation(title: string, memberIds: string[], myUserId: string) {
-  const { data: conv, error } = await supabase
+  const convId = crypto.randomUUID();
+
+  const { error } = await supabase
     .from("conversations")
-    .insert({ type: "group", title, created_by: myUserId })
-    .select()
-    .single();
+    .insert({ id: convId, type: "group", title, created_by: myUserId });
 
-  if (error || !conv) throw error;
+  if (error) throw error;
 
-  const members = [myUserId, ...memberIds].map((uid, i) => ({
-    conversation_id: conv.id,
+  // Insert owner first
+  await supabase.from("conversation_members").insert({
+    conversation_id: convId,
+    user_id: myUserId,
+    role: "owner"
+  });
+
+  // Insert others
+  const otherMembers = memberIds.map((uid) => ({
+    conversation_id: convId,
     user_id: uid,
-    role: i === 0 ? "owner" : "member",
+    role: "member",
   }));
 
-  await supabase.from("conversation_members").insert(members);
-  return conv;
+  if (otherMembers.length > 0) {
+    await supabase.from("conversation_members").insert(otherMembers);
+  }
+
+  return { id: convId };
 }
 
 // ─── User search ───────────────────────────────────────────────────────────────
