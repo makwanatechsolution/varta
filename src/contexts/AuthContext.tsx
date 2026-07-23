@@ -54,6 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { display_name: displayName } },
     });
     if (error) throw error;
+    
+    // Notify admin of new signup
+    try {
+      await fetch("/api/notifyAdminSignup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userName: displayName }),
+      });
+    } catch (err) {
+      console.warn("Failed to send admin notification:", err);
+    }
   };
 
   const signOut = async () => {

@@ -18,6 +18,8 @@ export interface Profile {
   custom_status: string | null;
   custom_status_expires_at: string | null;
   status_privacy?: "everyone" | "contacts" | "close_friends" | "nobody";
+  is_approved?: boolean;
+  is_admin?: boolean;
   created_at?: string;
   updated_at?: string;
   [key: string]: any;

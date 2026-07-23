@@ -11,13 +11,15 @@ import { SearchPage } from "./pages/SearchPage";
 import { InvitePage } from "./pages/InvitePage";
 import { JoinPage } from "./pages/JoinPage";
 import { StarredPage } from "./pages/StarredPage";
+import { AwaitingApprovalPage } from "./pages/AwaitingApprovalPage";
+import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 import { usePresence } from "./hooks/usePresence";
 import { useEffect } from "react";
 import { requestPushPermission } from "./lib/firebase";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
-  if (loading) {
+function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) {
+  const { session, profile, loading } = useAuth();
+  if (loading || (!profile && session)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b141a]">
         <div className="flex flex-col items-center gap-4 text-zinc-500">
@@ -28,6 +30,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
   if (!session) return <Navigate to="/login" replace />;
+  if (requireAdmin && !profile?.is_admin) return <Navigate to="/" replace />;
+  
+  // If not approved and trying to access anything other than /pending, redirect to /pending
+  if (!profile?.is_approved && window.location.pathname !== '/pending') {
+    return <Navigate to="/pending" replace />;
+  }
+
+  // If approved and trying to access /pending, redirect to /
+  if (profile?.is_approved && window.location.pathname === '/pending') {
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -47,6 +61,12 @@ function AppRoutes() {
 
       {/* Protected: main layout (sidebar) */}
       <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>} />
+      
+      {/* Pending Approval */}
+      <Route path="/pending" element={<ProtectedRoute><AwaitingApprovalPage /></ProtectedRoute>} />
+
+      {/* Admin Dashboard */}
+      <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboardPage /></ProtectedRoute>} />
 
       {/* Protected: full-screen pages */}
       <Route path="/chat/:id" element={<ProtectedRoute><ChatRoomPage /></ProtectedRoute>} />
