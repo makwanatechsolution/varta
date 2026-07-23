@@ -78,7 +78,12 @@ export function LoginPage() {
 
   const handleOAuthSignIn = async (provider: "google" | "github" | "azure" | "apple" | "facebook") => {
     try {
-      const { error: err } = await supabase.auth.signInWithOAuth({ provider: provider as any });
+      const { error: err } = await supabase.auth.signInWithOAuth({
+        provider: provider as any,
+        options: {
+          redirectTo: `${window.location.origin}`,
+        },
+      });
       if (err) throw err;
     } catch (e: any) {
       setError({ form: `Failed to connect to ${provider}: ${e.message}` });
