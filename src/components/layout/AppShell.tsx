@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
-import { MessageCircle, Phone, CircleDot, Settings, Search, Plus, CalendarDays, Archive } from "lucide-react";
+import { MessageCircle, Phone, CircleDot, Settings, Search, Plus, CalendarDays, Archive, LogOut } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useConversations, useGlobalTyping } from "../../hooks/useChat";
 import { useStories } from "../../hooks/useStories";
@@ -37,7 +37,7 @@ function getLastMessagePreview(conv: Conversation) {
 }
 
 export function AppShell() {
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const { conversations, loading } = useConversations();
   const globalTyping = useGlobalTyping(user?.id);
   const { stories, myStories, markViewed, postStory } = useStories();
@@ -121,6 +121,14 @@ export function AppShell() {
           >
             <Settings className={clsx("h-6 w-6", location.pathname.startsWith("/settings") ? "stroke-[2.5px]" : "stroke-[2px]")} />
           </Link>
+          <button
+            type="button"
+            onClick={signOut}
+            title="Log Out / Sign Out"
+            className="flex items-center justify-center h-12 w-12 rounded-2xl text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+          >
+            <LogOut className="h-6 w-6 stroke-[2px]" />
+          </button>
         </div>
       </nav>
 

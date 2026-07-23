@@ -197,6 +197,34 @@ export function useMessages(conversationId: string | undefined) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       throw error;
     }
+
+    // Trigger push notification to other conversation members
+    try {
+      const { data: members } = await supabase
+        .from("conversation_members")
+        .select("user_id")
+        .eq("conversation_id", conversationId);
+
+      if (members && members.length > 0) {
+        const recipientIds = members.map((m) => m.user_id).filter((id) => id !== user.id);
+        if (recipientIds.length > 0) {
+          const senderName = user.user_metadata?.display_name || "Someone";
+          fetch("/api/sendMessagePush", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              conversationId,
+              senderId: user.id,
+              senderName,
+              preview: type === "text" ? (content.trim() || "Sent a message") : `Sent a ${type}`,
+              recipientIds,
+            }),
+          }).catch((err) => console.warn("Failed to trigger message push notification:", err));
+        }
+      }
+    } catch (pushErr) {
+      console.warn("Error fetching conversation members for push notification:", pushErr);
+    }
   };
 
   const editMessage = async (messageId: string, newContent: string) => {

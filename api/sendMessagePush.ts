@@ -6,9 +6,11 @@ import { createClient } from "@supabase/supabase-js";
 if (!getApps().length) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "{}");
-    initializeApp({ credential: cert(serviceAccount) });
+    if (serviceAccount.project_id) {
+      initializeApp({ credential: cert(serviceAccount) });
+    }
   } catch (err) {
-    console.error("Firebase Admin initialization failed", err);
+    console.error("Firebase Admin initialization failed for message push", err);
   }
 }
 
@@ -23,7 +25,7 @@ export default async function handler(req: any, res: any) {
     return res.status(405).send("Method not allowed");
   }
 
-  const { conversationId, senderId, preview, recipientIds } = req.body || {};
+  const { conversationId, senderId, senderName, preview, recipientIds } = req.body || {};
   if (!conversationId || !recipientIds?.length) {
     return res.status(400).json({ error: "Missing fields" });
   }
@@ -34,24 +36,33 @@ export default async function handler(req: any, res: any) {
     if (!supabaseUrl || !supabaseServiceKey) throw new Error("Missing Supabase config");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const targetUserIds = recipientIds.filter((id: string) => id !== senderId);
+
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("token")
-      .in("user_id", recipientIds.filter((id: string) => id !== senderId));
+      .in("user_id", targetUserIds);
 
     if (!tokens?.length) {
       return res.json({ sent: 0 });
     }
 
+    const title = senderName ? `${senderName}` : "New message";
+    const body = preview ?? "You have a new message";
+
     const result = await getMessaging().sendEachForMulticast({
       tokens: tokens.map((t: any) => t.token),
-      notification: { title: "New message", body: preview ?? "You have a new message" },
-      data: { conversationId, type: "message" },
+      notification: { title, body },
+      data: {
+        conversationId,
+        type: "message",
+        click_action: `/chat`,
+      },
     });
 
     return res.json({ sent: result.successCount, failed: result.failureCount });
   } catch (err: any) {
-    console.error(err);
+    console.error("sendMessagePush error:", err);
     return res.status(500).json({ error: err.message });
   }
 }

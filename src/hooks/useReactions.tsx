@@ -90,6 +90,32 @@ export function useReactions(messageId: string) {
           user_id: user.id,
           emoji,
         });
+
+        // Trigger push notification to original message author
+        try {
+          const { data: msg } = await supabase
+            .from("messages")
+            .select("sender_id, conversation_id, content")
+            .eq("id", messageId)
+            .maybeSingle();
+
+          if (msg && msg.sender_id && msg.sender_id !== user.id) {
+            const senderName = user.user_metadata?.display_name || "Someone";
+            fetch("/api/sendMessagePush", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                conversationId: msg.conversation_id,
+                senderId: user.id,
+                senderName,
+                preview: `Reacted ${emoji} to: "${msg.content ? msg.content.substring(0, 30) : 'a message'}"`,
+                recipientIds: [msg.sender_id],
+              }),
+            }).catch((err) => console.warn("Failed to trigger reaction push notification:", err));
+          }
+        } catch (pushErr) {
+          console.warn("Error fetching message author for reaction push:", pushErr);
+        }
       }
     },
     [messageId, user],

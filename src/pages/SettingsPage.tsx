@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -194,6 +194,9 @@ export function SettingsPage() {
   );
 }
 
+import { QRCodeModal } from "../components/ui/QRCodeModal";
+import { LogOut, Camera, Loader2 } from "lucide-react";
+
 // ─── 1. Profile Settings Pane ────────────────────────────────────────────────
 function ProfileSettingsPane() {
   const { profile, refreshProfile } = useAuth();
@@ -204,6 +207,46 @@ function ProfileSettingsPane() {
   const [showQR, setShowQR] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File size exceeds 5 MB limit.");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const fileExt = file.name.split(".").pop() || "png";
+      const filePath = `avatars/${profile.id}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("media")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
+
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", profile.id);
+
+      if (updateErr) throw updateErr;
+
+      await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+      await refreshProfile();
+    } catch (err: any) {
+      console.error("Avatar upload failed:", err);
+      alert(`Avatar upload failed: ${err.message || "Unknown error"}`);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!profile) return;
@@ -230,7 +273,7 @@ function ProfileSettingsPane() {
         <div className="h-32 bg-gradient-to-r from-primary/30 via-primary/20 to-primary/40 relative flex justify-end p-4">
           <button
             type="button"
-            onClick={() => setShowQR(!showQR)}
+            onClick={() => setShowQR(true)}
             className="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md hover:bg-black/60 transition-all border border-white/10"
           >
             <QrCode className="w-4 h-4" />
@@ -247,9 +290,22 @@ function ProfileSettingsPane() {
                 size="lg"
                 showRing
               />
-              <label className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity text-white text-xs font-medium">
-                Change
-                <input type="file" accept="image/*" className="hidden" />
+              <label className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-xs font-medium">
+                {isUploadingAvatar ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Camera className="w-5 h-5 mb-0.5" />
+                    <span>Upload</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  disabled={isUploadingAvatar}
+                  className="hidden"
+                />
               </label>
             </div>
 
@@ -279,15 +335,7 @@ function ProfileSettingsPane() {
 
       {/* QR Code Modal Overlay */}
       {showQR && (
-        <div className="rounded-2xl bg-card border border-border-subtle p-6 flex flex-col items-center text-center space-y-4 shadow-xl">
-          <div className="p-4 bg-white rounded-2xl shadow-inner">
-            <QrCode className="w-40 h-40 text-black" />
-          </div>
-          <div>
-            <h4 className="font-bold text-main">{profile?.display_name}</h4>
-            <p className="text-xs text-muted">Scan to connect on Varta</p>
-          </div>
-        </div>
+        <QRCodeModal profile={profile} onClose={() => setShowQR(false)} />
       )}
 
       {/* Form Fields */}
@@ -548,15 +596,97 @@ function GeneralSettingsPane() {
 
 // ─── 4. Account Settings Pane ────────────────────────────────────────────────
 function AccountSettingsPane() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [email] = useState(user?.email ?? "");
-  const [twoFA, setTwoFA] = useState(false);
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [loadingMfa, setLoadingMfa] = useState(false);
+  const [enrollData, setEnrollData] = useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [mfaStatus, setMfaStatus] = useState<string | null>(null);
+
+  const fetchFactors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (!error && data) {
+        setMfaFactors(data.totp || []);
+      }
+    } catch (e) {
+      console.warn("Failed to load MFA factors", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFactors();
+  }, [fetchFactors]);
+
+  const handleEnroll = async () => {
+    setLoadingMfa(true);
+    setMfaStatus(null);
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      if (error) throw error;
+
+      setEnrollData({
+        factorId: data.id,
+        qrCode: data.totp.qr_code,
+        secret: data.totp.secret,
+      });
+    } catch (err: any) {
+      setMfaStatus(`2FA Enrollment failed: ${err.message}`);
+    } finally {
+      setLoadingMfa(false);
+    }
+  };
+
+  const handleVerifyEnrollment = async () => {
+    if (!enrollData || !verifyCode.trim()) return;
+    setLoadingMfa(true);
+    try {
+      const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({
+        factorId: enrollData.factorId,
+      });
+      if (challengeErr) throw challengeErr;
+
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId: enrollData.factorId,
+        challengeId: challengeData.id,
+        code: verifyCode.trim(),
+      });
+      if (verifyErr) throw verifyErr;
+
+      setMfaStatus("✅ 2FA successfully enabled!");
+      setEnrollData(null);
+      setVerifyCode("");
+      await fetchFactors();
+    } catch (err: any) {
+      setMfaStatus(`Verification failed: ${err.message || "Invalid 6-digit code"}`);
+    } finally {
+      setLoadingMfa(false);
+    }
+  };
+
+  const handleUnenroll = async (factorId: string) => {
+    if (!confirm("Are you sure you want to disable 2FA?")) return;
+    setLoadingMfa(true);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId });
+      if (error) throw error;
+      setMfaStatus("2FA disabled.");
+      await fetchFactors();
+    } catch (err: any) {
+      setMfaStatus(`Failed to disable 2FA: ${err.message}`);
+    } finally {
+      setLoadingMfa(false);
+    }
+  };
+
+  const is2FAActive = mfaFactors.some((f) => f.status === "verified");
 
   return (
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-main">Account & Security</h2>
-        <p className="text-sm text-muted">Manage email credentials, password, and 2FA authentication</p>
+        <p className="text-sm text-muted">Manage email credentials, 2FA authentication, and session security</p>
       </div>
 
       <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
@@ -571,34 +701,96 @@ function AccountSettingsPane() {
           />
         </div>
 
-        <div className="flex items-center justify-between border-t border-border-subtle pt-4">
-          <div>
-            <p className="font-semibold text-main text-sm">Two-Factor Authentication (2FA)</p>
-            <p className="text-xs text-muted">Require authenticator code on new device sign ins</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setTwoFA(!twoFA)}
-            className={clsx(
-              "px-4 py-2 rounded-xl text-xs font-semibold transition-all",
-              twoFA ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-primary text-white"
+        {/* 2FA Section */}
+        <div className="border-t border-border-subtle pt-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-main text-sm">Two-Factor Authentication (2FA TOTP)</p>
+              <p className="text-xs text-muted">Require Google Authenticator / Authy code when logging in</p>
+            </div>
+            {is2FAActive ? (
+              <span className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>2FA Enabled</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleEnroll}
+                disabled={loadingMfa || Boolean(enrollData)}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-primary text-white hover:scale-105 transition-all shadow-md"
+              >
+                {loadingMfa ? "Setting up..." : "Setup 2FA"}
+              </button>
             )}
-          >
-            {twoFA ? "2FA Enabled" : "Enable 2FA"}
-          </button>
+          </div>
+
+          {mfaStatus && <p className="text-xs text-primary font-medium">{mfaStatus}</p>}
+
+          {/* 2FA Setup Form */}
+          {enrollData && (
+            <div className="p-5 rounded-2xl bg-surface border border-primary/20 space-y-4 text-center">
+              <h4 className="text-sm font-bold text-main">Scan QR Code in Authenticator App</h4>
+              <div className="p-3 bg-white rounded-2xl inline-block shadow-md">
+                <img src={enrollData.qrCode} alt="2FA QR Code" className="w-44 h-44 object-contain" />
+              </div>
+              <div className="text-xs text-muted">
+                <span>Secret Key: </span>
+                <code className="bg-card px-2 py-1 rounded text-primary font-mono select-all">{enrollData.secret}</code>
+              </div>
+              <div className="flex gap-2 max-w-xs mx-auto pt-2">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value)}
+                  placeholder="6-digit code"
+                  className="flex-1 rounded-xl bg-card border border-border-subtle px-3 py-2 text-center text-sm font-mono tracking-widest outline-none text-main"
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyEnrollment}
+                  disabled={loadingMfa || verifyCode.length !== 6}
+                  className="px-4 py-2 rounded-xl bg-primary text-xs font-bold text-white shadow-md disabled:opacity-50"
+                >
+                  Verify
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Disable 2FA button */}
+          {is2FAActive && (
+            <div className="pt-2">
+              {mfaFactors.map((f) => (
+                <div key={f.id} className="flex items-center justify-between text-xs text-muted">
+                  <span>Authenticator Factor ({f.friendly_name || "TOTP"})</span>
+                  <button
+                    type="button"
+                    onClick={() => handleUnenroll(f.id)}
+                    className="text-red-400 hover:text-red-300 font-semibold"
+                  >
+                    Disable 2FA
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
+        {/* Sign Out / Log Out Button */}
         <div className="flex items-center justify-between border-t border-border-subtle pt-4">
           <div>
-            <p className="font-semibold text-main text-sm">Delete Account</p>
-            <p className="text-xs text-red-400">Permanently delete your profile, chats, and call history</p>
+            <p className="font-semibold text-main text-sm">Sign Out of Varta</p>
+            <p className="text-xs text-muted">Safely end your current session on this device</p>
           </div>
           <button
             type="button"
-            onClick={() => alert("To delete your account, please contact admin support.")}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-600/10 text-red-400 border border-red-600/20 hover:bg-red-600 hover:text-white transition-all"
+            onClick={signOut}
+            className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
           >
-            Delete Account
+            <LogOut className="w-4 h-4" />
+            <span>Log Out</span>
           </button>
         </div>
       </div>

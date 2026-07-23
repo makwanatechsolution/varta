@@ -57,6 +57,43 @@ export function useStories() {
       user_id: user.id,
       ...opts,
     });
+
+    // Trigger push notification to contacts / conversation partners
+    try {
+      const { data: userConvs } = await supabase
+        .from("conversation_members")
+        .select("conversation_id")
+        .eq("user_id", user.id);
+
+      if (userConvs && userConvs.length > 0) {
+        const convIds = userConvs.map((c) => c.conversation_id);
+        const { data: allMembers } = await supabase
+          .from("conversation_members")
+          .select("user_id")
+          .in("conversation_id", convIds);
+
+        if (allMembers) {
+          const recipientIds = Array.from(new Set(allMembers.map((m) => m.user_id).filter((id) => id !== user.id)));
+          if (recipientIds.length > 0) {
+            const senderName = user.user_metadata?.display_name || "Someone";
+            fetch("/api/sendMessagePush", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                conversationId: "",
+                senderId: user.id,
+                senderName: `${senderName} added a new story 📸`,
+                preview: opts.text_content ? opts.text_content.substring(0, 40) : `Check out ${senderName}'s new status story`,
+                recipientIds,
+              }),
+            }).catch((err) => console.warn("Failed to trigger story push notification:", err));
+          }
+        }
+      }
+    } catch (pushErr) {
+      console.warn("Error triggering story push notification:", pushErr);
+    }
+
     await load();
   };
 
