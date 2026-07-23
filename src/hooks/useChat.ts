@@ -26,7 +26,7 @@ export function useConversations() {
     }
 
     const ids = memberships.map((m) => m.conversation_id);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("conversations")
       .select(`
         *,
@@ -39,7 +39,22 @@ export function useConversations() {
       .in("id", ids)
       .order("last_message_at", { ascending: false, nullsFirst: false });
 
-    setConversations((data as Conversation[]) ?? []);
+    if (error) {
+      console.error("Error loading conversations:", error);
+    }
+    
+    // Process conversations to ensure last_message is correctly represented
+    // If last_message is an array (due to 1-to-many join without limit), take the most recent one
+    const processedData = (data as any[])?.map(conv => {
+      let lastMsg = conv.last_message;
+      if (Array.isArray(lastMsg)) {
+        // Sort by created_at descending and pick the first one
+        lastMsg = lastMsg.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      }
+      return { ...conv, last_message: lastMsg };
+    }) as Conversation[];
+
+    setConversations(processedData ?? []);
     setLoading(false);
   }, [user]);
 
@@ -69,18 +84,22 @@ export function useMessages(conversationId: string | undefined) {
   const load = useCallback(async () => {
     if (!conversationId || !user) return;
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("messages")
       .select(`
         *,
-        sender:profiles(id, display_name, avatar_url),
+        sender:profiles!sender_id(id, display_name, avatar_url),
         reactions:message_reactions(id, emoji, user_id, profile:profiles(id, display_name)),
-        reply_to:messages!reply_to_id(id, content, type, sender:profiles(id, display_name))
+        reply_to:messages!reply_to_id(id, content, type, sender:profiles!sender_id(id, display_name))
       `)
       .eq("conversation_id", conversationId)
       .eq("is_deleted", false)
       .order("created_at", { ascending: true })
       .limit(100);
+
+    if (error) {
+      console.error("Error loading messages:", error);
+    }
 
     setMessages((data as Message[]) ?? []);
     setLoading(false);
@@ -92,7 +111,43 @@ export function useMessages(conversationId: string | undefined) {
 
     const channel = supabase
       .channel(`messages:${conversationId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, load)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, async (payload) => {
+        // Fetch sender info for the new message
+        let senderData = null;
+        if (payload.new.sender_id) {
+          const res = await supabase.from('profiles').select('id, display_name, avatar_url').eq('id', payload.new.sender_id).single();
+          senderData = res.data;
+        }
+        
+        const newMsg = {
+          ...payload.new,
+          sender: senderData,
+          reactions: [],
+          reply_to: null
+        } as unknown as Message;
+        
+        setMessages(prev => {
+          if (prev.find(m => m.id === newMsg.id)) return prev;
+
+          // Replace matching temporary optimistic message if present
+          const tempIdx = prev.findIndex(
+            (m) =>
+              m.id.startsWith("temp-") &&
+              m.sender_id === newMsg.sender_id &&
+              m.type === newMsg.type &&
+              (m.content === newMsg.content || m.gif_url === newMsg.gif_url || m.media_url === newMsg.media_url)
+          );
+
+          if (tempIdx !== -1) {
+            const updated = [...prev];
+            updated[tempIdx] = newMsg;
+            return updated;
+          }
+
+          return [...prev, newMsg];
+        });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, load)
       .subscribe();
 
@@ -108,6 +163,27 @@ export function useMessages(conversationId: string | undefined) {
     // Only block empty sends for text messages — GIFs, images etc. can have empty content
     if (type === "text" && !content.trim()) return;
 
+    // Optimistic UI update
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const newMessage = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_id: user.id,
+      type,
+      content: content.trim() || null,
+      created_at: new Date().toISOString(),
+      is_edited: false,
+      is_deleted: false,
+      sender: {
+        id: user.id,
+        display_name: user.user_metadata?.display_name || "You",
+        avatar_url: user.user_metadata?.avatar_url || null,
+      },
+      ...extras,
+    };
+    
+    setMessages((prev) => [...prev, newMessage as unknown as Message]);
+
     const { error } = await supabase.from("messages").insert({
       conversation_id: conversationId,
       sender_id: user.id,
@@ -116,7 +192,11 @@ export function useMessages(conversationId: string | undefined) {
       ...extras,
     });
 
-    if (error) throw error;
+    if (error) {
+      // Revert optimistic update on failure
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      throw error;
+    }
   };
 
   const editMessage = async (messageId: string, newContent: string) => {
@@ -135,9 +215,11 @@ export function useMessages(conversationId: string | undefined) {
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
+// Hook for a specific conversation
 export function useTyping(conversationId: string | undefined, myId: string | undefined) {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const globalChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const timeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -158,20 +240,71 @@ export function useTyping(conversationId: string | undefined, myId: string | und
     ch.subscribe();
     channelRef.current = ch;
 
-    return () => { supabase.removeChannel(ch); };
+    // Join the global typing channel to broadcast typing status globally
+    // We don't subscribe or remove it here because AppShell's useGlobalTyping manages the connection.
+    const globalCh = supabase.channel(`typing_global`, {
+      config: { presence: { key: myId } },
+    });
+    globalChannelRef.current = globalCh;
+
+    return () => { 
+      supabase.removeChannel(ch); 
+    };
   }, [conversationId, myId]);
 
   const sendTyping = useCallback(() => {
-    if (!channelRef.current) return;
+    if (!channelRef.current || !globalChannelRef.current) return;
+    
+    // Broadcast locally
     channelRef.current.track({ typing: true });
+    
+    // Broadcast globally (so sidebar can see it)
+    globalChannelRef.current.track({ typing: true, conversationId });
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
       channelRef.current?.track({ typing: false });
+      globalChannelRef.current?.track({ typing: false, conversationId });
     }, 2500);
-  }, []);
+  }, [conversationId]);
 
   return { typingUsers, sendTyping };
+}
+
+// Hook for all conversations (used in the sidebar)
+export function useGlobalTyping(myId: string | undefined) {
+  const [typingMap, setTypingMap] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    if (!myId) return;
+    
+    const ch = supabase.channel(`typing_global`, {
+      config: { presence: { key: myId } },
+    });
+
+    ch.on("presence", { event: "sync" }, () => {
+      const state = ch.presenceState<{ typing: boolean; conversationId: string }>();
+      
+      const newMap: Record<string, string[]> = {};
+      
+      Object.entries(state).forEach(([uid, payloads]) => {
+        if (uid === myId) return;
+        const payload = (payloads as { typing: boolean; conversationId: string }[])[0];
+        if (payload?.typing && payload?.conversationId) {
+          if (!newMap[payload.conversationId]) newMap[payload.conversationId] = [];
+          newMap[payload.conversationId].push(uid);
+        }
+      });
+      
+      setTypingMap(newMap);
+    });
+
+    ch.subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [myId]);
+
+  return typingMap;
 }
 
 // ─── Conversation helpers ──────────────────────────────────────────────────────

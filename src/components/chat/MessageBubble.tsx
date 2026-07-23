@@ -111,8 +111,8 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             </p>
           )}
 
-          {message.type === "gif" && message.gif_url ? (
-            <img src={message.gif_url} alt="GIF" className="max-h-56 max-w-full rounded-xl object-cover mt-1" />
+          {message.type === "gif" && (message.gif_url || message.media_url) ? (
+            <img src={message.gif_url || message.media_url!} alt="GIF" className="max-h-64 max-w-xs rounded-2xl object-cover mt-1 shadow-md border border-white/10" loading="lazy" />
           ) : message.type === "image" && message.media_url ? (
             <img src={message.media_url} alt="Image" className="max-h-72 max-w-full rounded-xl object-cover mt-1" loading="lazy" />
           ) : message.type === "video" && message.media_url ? (

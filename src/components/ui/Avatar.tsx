@@ -2,10 +2,14 @@ import clsx from "clsx";
 import type { PresenceStatus } from "../../types/database";
 
 const RING_COLORS: Record<PresenceStatus, string> = {
-  online: "ring-[#1E88C7]",
+  online: "ring-emerald-500",
   away: "ring-amber-400",
   busy: "ring-red-500",
   dnd: "ring-red-600",
+  meeting: "ring-purple-500",
+  presentation: "ring-blue-500",
+  focused: "ring-indigo-500",
+  invisible: "ring-zinc-400",
   offline: "ring-zinc-600",
 };
 

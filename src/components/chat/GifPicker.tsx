@@ -1,6 +1,19 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Search,
+  X,
+  Flame,
+  Star,
+  Clock,
+  Grid,
+  Loader2,
+  Send,
+  Copy,
+  Check,
+  Maximize2,
+} from "lucide-react";
+import { vartaGifService, GIF_CATEGORIES, type VartaGif } from "../../services/vartaGifService";
 import type { GifResult } from "../../types/database";
-import { Search, X, ExternalLink, Send } from "lucide-react";
 
 interface GifPickerProps {
   open: boolean;
@@ -10,127 +23,355 @@ interface GifPickerProps {
 
 export function GifPicker({ open, onClose, onSelect }: GifPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [pasteUrl, setPasteUrl] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<"trending" | "categories" | "favorites" | "recent">("trending");
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  
+  const [gifs, setGifs] = useState<VartaGif[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [previewGif, setPreviewGif] = useState<VartaGif | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Focus input when opened
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceTimerRef = useRef<number | null>(null);
+
+  // Load GIF content when picker opens or parameters change
+  const fetchGifs = useCallback(async (query: string) => {
+    setLoading(true);
+    try {
+      if (activeTab === "favorites") {
+        setGifs(vartaGifService.getFavorites());
+      } else {
+        const results = await vartaGifService.searchGIFs(query);
+        setGifs(results);
+      }
+    } catch (e) {
+      console.warn("Failed to load GIFs", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setRecentSearches(vartaGifService.getRecentSearches());
+      setTimeout(() => inputRef.current?.focus(), 80);
+      fetchGifs(searchQuery);
     }
-  }, [open]);
+  }, [open, fetchGifs]);
 
-  const handleSearch = () => {
-    if (!searchQuery.trim()) return;
-    window.open(`https://giphy.com/search/${encodeURIComponent(searchQuery)}`, "_blank");
+  // Debounced live search
+  const handleQueryChange = (val: string) => {
+    setSearchQuery(val);
+    setActiveCategory(null);
+    if (val.trim()) {
+      setActiveTab("trending");
+    }
+
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = window.setTimeout(() => {
+      fetchGifs(val);
+    }, 300);
   };
 
-  const handleSend = () => {
-    if (!pasteUrl.trim()) return;
-    // Basic validation to ensure it's a URL
-    try {
-      new URL(pasteUrl);
-      onSelect({
-        id: Date.now().toString(),
-        url: pasteUrl,
-        preview: pasteUrl,
-        provider: "giphy",
-        width: 480,
-        height: 480,
-      });
-      setPasteUrl("");
-      setSearchQuery("");
-      onClose();
-    } catch {
-      alert("Please enter a valid URL");
-    }
+  const handleSelectCategory = (catName: string) => {
+    setActiveCategory(catName);
+    setSearchQuery(catName);
+    fetchGifs(catName);
+  };
+
+  const handleSelectRecentSearch = (term: string) => {
+    setSearchQuery(term);
+    fetchGifs(term);
+  };
+
+  const handleSendGif = (gif: VartaGif) => {
+    onSelect({
+      id: gif.id,
+      url: gif.url,
+      preview: gif.thumbnail,
+      provider: gif.provider as any,
+      width: gif.width,
+      height: gif.height,
+    });
+    onClose();
+  };
+
+  const handleCopyLink = (gif: VartaGif) => {
+    navigator.clipboard.writeText(gif.url);
+    setCopiedId(gif.id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   if (!open) return null;
 
   return (
     <div
-      className="absolute bottom-full left-0 z-50 mb-2 w-full max-w-sm rounded-2xl border border-zinc-700/50 bg-[#111b21] shadow-2xl overflow-hidden"
+      className="absolute bottom-full left-0 z-50 mb-3 w-[420px] max-w-[92vw] h-[520px] rounded-3xl border border-zinc-800 bg-[#111b21] shadow-2xl overflow-hidden flex flex-col backdrop-blur-3xl animate-in fade-in slide-in-from-bottom-3 duration-200"
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <h3 className="text-sm font-medium text-white">Send a GIF</h3>
-        <button type="button" onClick={onClose} className="rounded-full p-1 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors">
-          <X className="h-4 w-4" />
-        </button>
+      {/* ─── Top Header & Search Bar ────────────────────────────────────────── */}
+      <div className="p-4 border-b border-zinc-800/80 bg-[#0b141a]/60 space-y-3 shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+            <input
+              ref={inputRef}
+              value={searchQuery}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              placeholder="Search GIFs..."
+              className="w-full rounded-2xl bg-[#202c33] py-2.5 pl-10 pr-9 text-xs text-white placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-[#1E88C7]/30 transition-all font-medium"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => handleQueryChange("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : loading ? (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1E88C7] animate-spin" />
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-full bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="flex rounded-xl bg-[#202c33] p-1 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("trending"); setSearchQuery(""); fetchGifs(""); }}
+            className={`flex-1 py-1.5 flex items-center justify-center gap-1.5 rounded-lg transition-all ${
+              activeTab === "trending" ? "bg-[#1E88C7] text-white shadow-md" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Flame className="h-3.5 w-3.5" />
+            <span>Trending</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("categories")}
+            className={`flex-1 py-1.5 flex items-center justify-center gap-1.5 rounded-lg transition-all ${
+              activeTab === "categories" ? "bg-[#1E88C7] text-white shadow-md" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Grid className="h-3.5 w-3.5" />
+            <span>Categories</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab("favorites"); fetchGifs(""); }}
+            className={`flex-1 py-1.5 flex items-center justify-center gap-1.5 rounded-lg transition-all ${
+              activeTab === "favorites" ? "bg-[#1E88C7] text-white shadow-md" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Star className="h-3.5 w-3.5" />
+            <span>Favorites</span>
+          </button>
+        </div>
       </div>
 
-      <div className="p-4 space-y-4">
-        {/* Step 1: Search */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            1. Find on Giphy
-          </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-              <input
-                ref={inputRef}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search keywords..."
-                className="w-full rounded-lg bg-[#202c33] py-2 pl-8 pr-3 text-sm text-white outline-none placeholder:text-zinc-500"
-              />
-            </div>
-            <button
-              onClick={handleSearch}
-              disabled={!searchQuery.trim()}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#1E88C7] px-3 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-[#1971A5] transition-colors"
-            >
-              Search <ExternalLink className="h-3.5 w-3.5" />
-            </button>
+      {/* ─── Main Content Area ────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+        {/* Categories Grid (When Categories tab is selected) */}
+        {activeTab === "categories" ? (
+          <div className="grid grid-cols-2 gap-2.5">
+            {GIF_CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => handleSelectCategory(cat.name)}
+                className={`p-3 rounded-2xl border flex items-center gap-3 transition-all hover:scale-[1.02] text-left ${
+                  activeCategory === cat.name
+                    ? "bg-[#1E88C7]/20 border-[#1E88C7] text-white"
+                    : "bg-[#202c33]/70 border-zinc-800/80 text-zinc-300 hover:bg-[#202c33]"
+                }`}
+              >
+                <span className="text-2xl">{cat.emoji}</span>
+                <span className="font-semibold text-xs">{cat.name}</span>
+              </button>
+            ))}
           </div>
-          <p className="text-[10px] text-zinc-500">
-            Opens Giphy in a new tab. Find a GIF you like, right-click it, and select "Copy Image Address" (or "Copy Link").
-          </p>
-        </div>
+        ) : (
+          <>
+            {/* Reaction Categories Horizontal Scroll (when on Trending) */}
+            {activeTab === "trending" && !searchQuery && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {GIF_CATEGORIES.slice(0, 10).map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => handleSelectCategory(cat.name)}
+                    className="shrink-0 flex items-center gap-1.5 rounded-full bg-[#202c33] hover:bg-zinc-700 px-3 py-1.5 text-xs text-white border border-zinc-700/50 transition-all active:scale-95"
+                  >
+                    <span>{cat.emoji}</span>
+                    <span className="font-medium">{cat.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-        <hr className="border-zinc-800" />
+            {/* Recent Searches Pills */}
+            {recentSearches.length > 0 && !searchQuery && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 font-semibold uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> Recent Searches
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      vartaGifService.clearRecentSearches();
+                      setRecentSearches([]);
+                    }}
+                    className="hover:text-zinc-300"
+                  >
+                    Clear
+                  </button>
+                </div>
 
-        {/* Step 2: Paste */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            2. Paste Link Here
-          </label>
-          <div className="flex gap-2">
-            <input
-              value={pasteUrl}
-              onChange={(e) => setPasteUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder="https://media.giphy.com/..."
-              className="flex-1 rounded-lg bg-[#202c33] px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500"
-            />
-            <button
-              onClick={handleSend}
-              disabled={!pasteUrl.trim()}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#1E88C7] px-3 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-[#1971A5] transition-colors"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentSearches.slice(0, 5).map((term) => (
+                    <button
+                      key={term}
+                      type="button"
+                      onClick={() => handleSelectRecentSearch(term)}
+                      className="rounded-xl bg-[#202c33]/80 hover:bg-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors"
+                    >
+                      {term}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {/* Preview */}
-        {pasteUrl.trim() && (
-          <div className="mt-2 flex justify-center rounded-lg border border-zinc-800 bg-black/20 p-2">
-            <img 
-              src={pasteUrl} 
-              alt="GIF Preview" 
-              className="max-h-32 rounded object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1MjUyNTIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIxMCIvPjxsaW5lIHgxPSIxMiIgeTE9IjgiIHgyPSIxMiIgeTI9IjEyIi8+PGxpbmUgeDE9IjEyIiB5MT0iMTYiIHgyPSIxMi4wMSIgeTI9IjE2Ii8+PC9zdmc+';
-              }}
-            />
-          </div>
+            {/* Loading Indicator */}
+            {loading && (
+              <div className="flex items-center justify-center py-12 text-zinc-400">
+                <Loader2 className="h-6 w-6 animate-spin text-[#1E88C7]" />
+              </div>
+            )}
+
+            {/* Masonry Pinterest-style Adaptive GIF Grid */}
+            {!loading && (
+              <div className="columns-2 gap-2.5 space-y-2.5">
+                {gifs.map((gif) => (
+                  <div
+                    key={gif.id}
+                    className="group relative rounded-2xl overflow-hidden bg-[#202c33] cursor-pointer break-inside-avoid border border-zinc-800/60 shadow-md hover:shadow-xl transition-all duration-200"
+                    onClick={() => handleSendGif(gif)}
+                  >
+                    <img
+                      src={gif.thumbnail || gif.url}
+                      alt={gif.title}
+                      loading="lazy"
+                      className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+
+                    {/* Hover Overlay Controls */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 flex flex-col justify-between">
+                      <div className="flex justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewGif(gif);
+                          }}
+                          className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black transition-colors"
+                          title="Preview"
+                        >
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-white/90 truncate max-w-[120px]">
+                          {gif.title}
+                        </span>
+                        <div className="h-7 w-7 rounded-full bg-[#1E88C7] flex items-center justify-center text-white shadow-lg">
+                          <Send className="h-3.5 w-3.5" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!loading && gifs.length === 0 && (
+              <div className="text-center py-12 text-zinc-500 text-xs font-medium space-y-2">
+                <p>No GIFs found matching your search.</p>
+                <button
+                  type="button"
+                  onClick={() => handleQueryChange("trending")}
+                  className="text-[#1E88C7] hover:underline"
+                >
+                  View Trending GIFs
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* ─── Fullscreen GIF Preview Modal ─────────────────────────────────────── */}
+      {previewGif && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setPreviewGif(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-full bg-zinc-800 text-zinc-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="rounded-2xl overflow-hidden bg-black flex items-center justify-center max-h-64 border border-zinc-800">
+              <img src={previewGif.url} alt={previewGif.title} className="max-h-64 object-contain" />
+            </div>
+
+            <div className="space-y-1">
+              <h4 className="font-semibold text-white text-sm">{previewGif.title}</h4>
+              <p className="text-[11px] text-zinc-500 font-mono">
+                {previewGif.width} × {previewGif.height} px
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => handleCopyLink(previewGif)}
+                className="flex items-center justify-center gap-1.5 rounded-2xl bg-[#202c33] py-2.5 text-xs font-semibold text-white hover:bg-zinc-700 transition-colors"
+              >
+                {copiedId === previewGif.id ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                <span>{copiedId === previewGif.id ? "Copied!" : "Copy Link"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleSendGif(previewGif);
+                  setPreviewGif(null);
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-2xl bg-[#1E88C7] py-2.5 text-xs font-semibold text-white shadow-lg hover:bg-[#1971A5] transition-colors"
+              >
+                <Send className="h-4 w-4" />
+                <span>Send GIF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

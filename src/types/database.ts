@@ -1,8 +1,20 @@
-export type PresenceStatus = "online" | "away" | "busy" | "dnd" | "offline";
+export type PresenceStatus = "online" | "away" | "busy" | "dnd" | "invisible" | "offline" | "meeting" | "presentation" | "focused";
 export type ConversationType = "direct" | "group" | "channel";
 export type MessageType = "text" | "image" | "video" | "audio" | "file" | "gif" | "system" | "call_log";
 export type CallType = "voice" | "video";
-export type CallStatus = "ringing" | "active" | "ended" | "missed" | "declined" | "failed";
+export type CallStatus =
+  | "calling"
+  | "ringing"
+  | "connecting"
+  | "connected"
+  | "active"
+  | "reconnecting"
+  | "ended"
+  | "missed"
+  | "declined"
+  | "busy"
+  | "offline"
+  | "failed";
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -119,7 +131,7 @@ export interface CallSignal {
   call_id: string;
   from_user_id: string;
   to_user_id: string | null;
-  signal_type: "offer" | "answer" | "ice-candidate" | "hangup";
+  signal_type: "offer" | "answer" | "ice-candidate" | "hangup" | "busy";
   payload: Json;
   created_at: string;
   [key: string]: any;

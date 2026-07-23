@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { CallingProvider } from "./contexts/CallingContext";
+import { GlobalCallOverlay } from "./components/calls/CallUI";
 import { AppShell } from "./components/layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -18,7 +20,7 @@ import { usePresence } from "./hooks/usePresence";
 import { useEffect } from "react";
 import { requestPushPermission } from "./lib/firebase";
 
-function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) {
+function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
   const { session, profile, loading } = useAuth();
   if (loading || (!profile && session)) {
     return (
@@ -33,12 +35,10 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   if (!session) return <Navigate to="/login" replace />;
   if (requireAdmin && !profile?.is_admin) return <Navigate to="/" replace />;
   
-  // If not approved and trying to access anything other than /pending, redirect to /pending
   if (!profile?.is_approved && window.location.pathname !== '/pending') {
     return <Navigate to="/pending" replace />;
   }
 
-  // If approved and trying to access /pending, redirect to /
   if (profile?.is_approved && window.location.pathname === '/pending') {
     return <Navigate to="/" replace />;
   }
@@ -55,32 +55,35 @@ function AppRoutes() {
   }, [user]);
 
   return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/join" element={<JoinPage />} />
+    <>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/join" element={<JoinPage />} />
 
-      {/* Protected: main layout (split pane) */}
-      <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-        <Route path="chat/:id" element={<ChatRoomPage />} />
-        <Route path="new-chat" element={<NewChatPage />} />
-        <Route path="calls" element={<CallsPage />} />
-        <Route path="meetings" element={<MeetingsPage />} />
-        <Route path="status" element={<StatusPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="search" element={<SearchPage />} />
-        <Route path="invite" element={<InvitePage />} />
-        <Route path="starred" element={<StarredPage />} />
-      </Route>
-      
-      {/* Pending Approval */}
-      <Route path="/pending" element={<ProtectedRoute><AwaitingApprovalPage /></ProtectedRoute>} />
+        {/* Protected: main layout (split pane) */}
+        <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+          <Route path="chat/:id" element={<ChatRoomPage />} />
+          <Route path="new-chat" element={<NewChatPage />} />
+          <Route path="calls" element={<CallsPage />} />
+          <Route path="meetings" element={<MeetingsPage />} />
+          <Route path="status" element={<StatusPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="search" element={<SearchPage />} />
+          <Route path="invite" element={<InvitePage />} />
+          <Route path="starred" element={<StarredPage />} />
+        </Route>
+        
+        {/* Pending Approval */}
+        <Route path="/pending" element={<ProtectedRoute><AwaitingApprovalPage /></ProtectedRoute>} />
 
-      {/* Admin Dashboard */}
-      <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboardPage /></ProtectedRoute>} />
+        {/* Admin Dashboard */}
+        <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminDashboardPage /></ProtectedRoute>} />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <GlobalCallOverlay />
+    </>
   );
 }
 
@@ -88,7 +91,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <CallingProvider>
+          <AppRoutes />
+        </CallingProvider>
       </AuthProvider>
     </BrowserRouter>
   );

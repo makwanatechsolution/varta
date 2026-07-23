@@ -9,7 +9,6 @@ import { MessageBubble } from "../components/chat/MessageBubble";
 import { GifPicker } from "../components/chat/GifPicker";
 import { VoiceRecorder } from "../components/chat/VoiceRecorder";
 import { TypingIndicatorBubble } from "../components/chat/TypingIndicatorBubble";
-import { IncomingCallScreen, ActiveCallOverlay } from "../components/calls/CallUI";
 import { Avatar } from "../components/ui/Avatar";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import type { EmojiClickData } from "emoji-picker-react";
@@ -76,11 +75,7 @@ export function ChatRoomPage() {
   else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
   else if (typingNames.length > 2) typingText = `${typingNames[0]} and ${typingNames.length - 1} others are typing...`;
 
-  const {
-    activeCall, incomingCall, localStream, remoteStream,
-    isMuted, isVideoOff, startCall, acceptCall, declineCall, endCall,
-    toggleMute, toggleVideo,
-  } = useCalling(id);
+  const { startCall } = useCalling(id);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -102,7 +97,7 @@ export function ChatRoomPage() {
   };
 
   const handleGif = async (gif: GifResult) => {
-    await sendMessage("", "gif", { gif_url: gif.url });
+    await sendMessage("", "gif", { gif_url: gif.url, media_url: gif.url });
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,10 +161,10 @@ export function ChatRoomPage() {
           </p>
         </div>
 
-        <button type="button" onClick={() => startCall("voice")} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors">
+        <button type="button" onClick={() => startCall("voice", otherUser || undefined)} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors" title="Voice Call">
           <Phone className="h-5 w-5" />
         </button>
-        <button type="button" onClick={() => startCall("video")} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors">
+        <button type="button" onClick={() => startCall("video", otherUser || undefined)} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors" title="Video Call">
           <Video className="h-5 w-5" />
         </button>
       </header>
@@ -327,30 +322,6 @@ export function ChatRoomPage() {
           </div>
         </div>
       </div>
-
-      {/* Overlays */}
-      {incomingCall && (
-        <IncomingCallScreen
-          call={incomingCall}
-          callerName={otherUser?.display_name ?? "Incoming call"}
-          onAccept={acceptCall}
-          onDecline={declineCall}
-        />
-      )}
-      {activeCall && (
-        <ActiveCallOverlay
-          localStream={localStream}
-          remoteStream={remoteStream}
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-          onEnd={endCall}
-          isVideo={activeCall.type === "video"}
-          callerName={otherUser?.display_name ?? ""}
-          duration={activeCall.started_at ? new Date(activeCall.started_at) : undefined}
-        />
-      )}
     </div>
   );
 }

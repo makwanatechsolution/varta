@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { MessageCircle, Phone, CircleDot, Settings, Search, Plus, CalendarDays, Archive } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { useConversations } from "../../hooks/useChat";
+import { useConversations, useGlobalTyping } from "../../hooks/useChat";
 import { useStories } from "../../hooks/useStories";
 import { Avatar } from "../ui/Avatar";
 import { StoryBar, StoryViewer } from "../stories/StoryViewer";
@@ -39,6 +39,7 @@ function getLastMessagePreview(conv: Conversation) {
 export function AppShell() {
   const { user, profile } = useAuth();
   const { conversations, loading } = useConversations();
+  const globalTyping = useGlobalTyping(user?.id);
   const { stories, myStories, markViewed, postStory } = useStories();
   const [viewerStories, setViewerStories] = useState<StatusStory[] | null>(null);
   const [search, setSearch] = useState("");
@@ -213,6 +214,7 @@ export function AppShell() {
             {filtered.map((conv) => {
               const preview = getLastMessagePreview(conv);
               const isActive = location.pathname === `/chat/${conv.id}`;
+              const isTyping = Boolean(globalTyping[conv.id]?.length);
 
               return (
                 <motion.div
@@ -251,11 +253,11 @@ export function AppShell() {
                       <div className="flex justify-between items-center">
                         <p className={clsx(
                           "truncate text-[13px] transition-colors flex-1 mr-2",
-                          isActive ? "text-white/90" : "text-muted"
+                          isActive ? "text-white/90" : (isTyping ? "text-primary font-medium" : "text-muted")
                         )}>
-                          {preview ?? (
+                          {isTyping ? "typing..." : (preview ?? (
                             conv.type === "group" ? "Group chat" : "Tap to chat"
-                          )}
+                          ))}
                         </p>
                         {/* Example Badges */}
                         <div className="flex items-center gap-1.5 shrink-0">
