@@ -62,7 +62,7 @@ export function JoinPage() {
   if (loadingInvite) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b141a]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#25D366]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#1E88C7]" />
       </div>
     );
   }
@@ -73,7 +73,7 @@ export function JoinPage() {
         <AlertCircle className="mb-4 h-12 w-12 text-red-400" />
         <h1 className="text-xl font-bold text-white">Invalid or Expired Invite</h1>
         <p className="mt-2 text-sm text-zinc-400">This invite link is not valid or has already been used.</p>
-        <Link to="/login" className="mt-6 rounded-xl bg-[#25D366] px-6 py-3 text-sm font-semibold text-white hover:bg-[#1da855] transition-colors">
+        <Link to="/login" className="mt-6 rounded-xl bg-[#1E88C7] px-6 py-3 text-sm font-semibold text-white hover:bg-[#1971A5] transition-colors">
           Go to Login
         </Link>
       </div>
@@ -85,8 +85,8 @@ export function JoinPage() {
       <div className="w-full max-w-sm">
         {/* Varta logo */}
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25D366]/10">
-            <MessageCircle className="h-7 w-7 text-[#25D366]" />
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#1E88C7]/10">
+            <MessageCircle className="h-7 w-7 text-[#1E88C7]" />
           </div>
           <h1 className="text-2xl font-bold text-white">Join Varta</h1>
         </div>
@@ -108,7 +108,7 @@ export function JoinPage() {
               </div>
             </div>
             {invite.custom_message && (
-              <div className="mt-3 rounded-xl bg-[#202c33] px-3 py-2 text-sm text-zinc-300 italic border-l-2 border-[#25D366]">
+              <div className="mt-3 rounded-xl bg-[#202c33] px-3 py-2 text-sm text-zinc-300 italic border-l-2 border-[#1E88C7]">
                 "{invite.custom_message}"
               </div>
             )}
@@ -122,7 +122,7 @@ export function JoinPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
             required
-            className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#25D366]"
+            className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#1E88C7]"
           />
           <input
             type="email"
@@ -130,7 +130,7 @@ export function JoinPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
             required
-            className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#25D366]"
+            className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#1E88C7]"
           />
           <input
             type="password"
@@ -139,7 +139,7 @@ export function JoinPage() {
             placeholder="Create a password (min 6 chars)"
             required
             minLength={6}
-            className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#25D366]"
+            className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#1E88C7]"
           />
 
           {error && (
@@ -152,7 +152,7 @@ export function JoinPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 font-semibold text-white disabled:opacity-50 hover:bg-[#1da855] transition-colors"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88C7] py-3 font-semibold text-white disabled:opacity-50 hover:bg-[#1971A5] transition-colors"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             {submitting ? "Creating account..." : "Join Varta"}
@@ -160,7 +160,7 @@ export function JoinPage() {
 
           <p className="text-center text-xs text-zinc-500">
             Already have an account?{" "}
-            <Link to="/login" className="text-[#25D366] hover:underline">Sign in</Link>
+            <Link to="/login" className="text-[#1E88C7] hover:underline">Sign in</Link>
           </p>
         </form>
       </div>

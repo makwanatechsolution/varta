@@ -8,9 +8,13 @@ if (!url || !anonKey) {
   console.warn("Varta: Supabase env vars missing. Copy .env.example → .env");
 }
 
-export const supabase = createClient<Database>(url ?? "", anonKey ?? "", {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const supabase = createClient<Database>(
+  url || "https://placeholder.supabase.co",
+  anonKey || "placeholder_anon_key",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  }
+);

@@ -7,6 +7,8 @@ import { useCalling } from "../hooks/useCalling";
 import { usePresence } from "../hooks/usePresence";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { GifPicker } from "../components/chat/GifPicker";
+import { VoiceRecorder } from "../components/chat/VoiceRecorder";
+import { TypingIndicatorBubble } from "../components/chat/TypingIndicatorBubble";
 import { IncomingCallScreen, ActiveCallOverlay } from "../components/calls/CallUI";
 import { Avatar } from "../components/ui/Avatar";
 import type { GifResult, Message, Conversation, Profile } from "../types/database";
@@ -58,9 +60,19 @@ export function ChatRoomPage() {
   const [editingMsg, setEditingMsg] = useState<Message | null>(null);
   const [editText, setEditText] = useState("");
   const [showEmojiComposer, setShowEmojiComposer] = useState(false);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   usePresence();
+
+  const typingNames = typingUsers
+    .map(uid => conv?.members?.find(m => m.user_id === uid)?.profile?.display_name)
+    .filter(Boolean) as string[];
+    
+  let typingText = "typing...";
+  if (typingNames.length === 1) typingText = `${typingNames[0]} is typing...`;
+  else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
+  else if (typingNames.length > 2) typingText = `${typingNames[0]} and ${typingNames.length - 1} others are typing...`;
 
   const {
     activeCall, incomingCall, localStream, remoteStream,
@@ -104,6 +116,15 @@ export function ChatRoomPage() {
     e.target.value = "";
   };
 
+  const handleVoiceSend = async (blob: Blob) => {
+    if (!user || !id) return;
+    const path = `chat/${id}/audio_${Date.now()}.webm`;
+    const { data, error } = await supabase.storage.from("media").upload(path, blob, { upsert: true });
+    if (error || !data) return;
+    const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
+    await sendMessage("", "audio", { media_url: urlData.publicUrl });
+  };
+
   const startEdit = (msg: Message) => {
     setEditingMsg(msg);
     setEditText(msg.content ?? "");
@@ -136,20 +157,20 @@ export function ChatRoomPage() {
           <p className="truncate font-medium text-white">{title}</p>
           <p className="text-xs text-zinc-500">
             {typingUsers.length > 0
-              ? "typing..."
+              ? typingText
               : conv?.type === "group"
               ? `${conv.members?.length ?? 0} members`
               : otherUser?.presence === "online"
-              ? <span className="text-[#25D366]">online</span>
+              ? <span className="text-[#1E88C7]">online</span>
               : "tap for info"}
           </p>
         </div>
 
         <button type="button" onClick={() => startCall("voice")} className="rounded-full p-2 hover:bg-zinc-800">
-          <Phone className="h-5 w-5 text-[#25D366]" />
+          <Phone className="h-5 w-5 text-[#1E88C7]" />
         </button>
         <button type="button" onClick={() => startCall("video")} className="rounded-full p-2 hover:bg-zinc-800">
-          <Video className="h-5 w-5 text-[#25D366]" />
+          <Video className="h-5 w-5 text-[#1E88C7]" />
         </button>
       </header>
 
@@ -172,17 +193,8 @@ export function ChatRoomPage() {
           />
         ))}
         {typingUsers.length > 0 && (
-          <div className="flex items-center gap-2 px-2">
-            <div className="flex gap-1">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="h-2 w-2 rounded-full bg-zinc-500 animate-bounce"
-                  style={{ animationDelay: `${i * 0.15}s` }}
-                />
-              ))}
-            </div>
-            <span className="text-xs text-zinc-500">typing...</span>
+          <div className="px-4">
+            <TypingIndicatorBubble />
           </div>
         )}
         <div ref={bottomRef} />
@@ -215,9 +227,9 @@ export function ChatRoomPage() {
         {/* Reply preview */}
         {replyTo && (
           <div className="flex items-center gap-2 border-b border-zinc-700 px-4 py-2">
-            <ReplyIcon className="h-4 w-4 text-[#25D366] shrink-0" />
+            <ReplyIcon className="h-4 w-4 text-[#1E88C7] shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-[#25D366]">{replyTo.sender?.display_name ?? "Message"}</p>
+              <p className="text-xs font-medium text-[#1E88C7]">{replyTo.sender?.display_name ?? "Message"}</p>
               <p className="truncate text-xs text-zinc-400">
                 {replyTo.type === "gif" ? "GIF" : replyTo.content}
               </p>
@@ -239,48 +251,59 @@ export function ChatRoomPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 p-3">
-          <button type="button" onClick={() => setShowEmojiComposer(!showEmojiComposer)} className="rounded-full p-2 hover:bg-zinc-800">
-            <Smile className="h-5 w-5 text-zinc-400" />
-          </button>
-          <button type="button" onClick={() => setGifOpen(true)} className="rounded-full p-2 hover:bg-zinc-800">
-            <ImageIcon className="h-5 w-5 text-zinc-400" />
-          </button>
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full p-2 hover:bg-zinc-800">
-            <svg className="h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-            </svg>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleImageUpload}
-          />
+        <div className="flex items-center gap-2 p-3 relative overflow-hidden">
+          {!isVoiceRecording && (
+            <>
+              <button type="button" onClick={() => setShowEmojiComposer(!showEmojiComposer)} className="rounded-full p-2 hover:bg-zinc-800">
+                <Smile className="h-5 w-5 text-zinc-400" />
+              </button>
+              <button type="button" onClick={() => setGifOpen(true)} className="rounded-full p-2 hover:bg-zinc-800">
+                <ImageIcon className="h-5 w-5 text-zinc-400" />
+              </button>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full p-2 hover:bg-zinc-800">
+                <svg className="h-5 w-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <input
+                value={editingMsg ? editText : text}
+                onChange={(e) => {
+                  if (editingMsg) setEditText(e.target.value);
+                  else { setText(e.target.value); sendTyping(); }
+                }}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                placeholder={editingMsg ? "Edit message..." : "Type a message"}
+                className="flex-1 rounded-full bg-[#202c33] px-4 py-2 text-sm text-white outline-none placeholder:text-zinc-500"
+              />
+            </>
+          )}
 
-          <input
-            value={editingMsg ? editText : text}
-            onChange={(e) => {
-              if (editingMsg) setEditText(e.target.value);
-              else { setText(e.target.value); sendTyping(); }
-            }}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder={editingMsg ? "Edit message..." : "Type a message"}
-            className="flex-1 rounded-full bg-[#202c33] px-4 py-2 text-sm text-white outline-none placeholder:text-zinc-500"
-          />
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={editingMsg ? !editText.trim() : !text.trim()}
-            className={clsx(
-              "rounded-full p-2 disabled:opacity-40 transition-all",
-              editingMsg ? "bg-amber-500" : "bg-[#25D366]",
-            )}
-          >
-            <Send className="h-5 w-5 text-white" />
-          </button>
+          {editingMsg || text.trim() ? (
+            <button
+              type="button"
+              onClick={handleSend}
+              className={clsx(
+                "rounded-full p-2 disabled:opacity-40 transition-all shrink-0",
+                editingMsg ? "bg-amber-500" : "bg-[#1E88C7]",
+              )}
+            >
+              <Send className="h-5 w-5 text-white" />
+            </button>
+          ) : (
+            <VoiceRecorder
+              onSend={handleVoiceSend}
+              onCancel={() => setIsVoiceRecording(false)}
+              onRecordingChange={setIsVoiceRecording}
+              className={isVoiceRecording ? "flex-1" : ""}
+            />
+          )}
         </div>
       </div>
 

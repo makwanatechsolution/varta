@@ -65,7 +65,7 @@ export function CallsPage() {
 
   const StatusIcon = ({ call }: { call: CallEntry }) => {
     if (call.status === "missed") return <PhoneMissed className="h-4 w-4 text-red-400" />;
-    if (call.direction === "incoming") return <PhoneIncoming className="h-4 w-4 text-[#25D366]" />;
+    if (call.direction === "incoming") return <PhoneIncoming className="h-4 w-4 text-[#1E88C7]" />;
     return <PhoneOutgoing className="h-4 w-4 text-zinc-400" />;
   };
 
@@ -126,7 +126,7 @@ export function CallsPage() {
               <Link
                 to={`/chat/${call.conversation_id}`}
                 state={{ startCall: call.type }}
-                className={`rounded-full p-2 hover:bg-zinc-800 ${call.type === "video" ? "text-[#25D366]" : "text-[#25D366]"}`}
+                className={`rounded-full p-2 hover:bg-zinc-800 ${call.type === "video" ? "text-[#1E88C7]" : "text-[#1E88C7]"}`}
                 title={`Call back (${call.type})`}
               >
                 {call.type === "video" ? <Video className="h-5 w-5" /> : <Phone className="h-5 w-5" />}

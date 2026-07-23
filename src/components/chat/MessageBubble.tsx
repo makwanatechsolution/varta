@@ -5,6 +5,7 @@ import { Smile, Reply, Edit2, Trash2, Phone, Video } from "lucide-react";
 import type { Message } from "../../types/database";
 import { useReactions, EmojiPickerPanel } from "../../hooks/useReactions";
 import { Avatar } from "../ui/Avatar";
+import { VoicePlayer } from "./VoicePlayer";
 
 interface MessageBubbleProps {
   message: Message;
@@ -59,10 +60,10 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
         {/* Reply preview */}
         {message.reply_to_id && (message as Message & { reply_to?: { content: string | null; sender?: { display_name: string } } }).reply_to && (
           <div className={clsx(
-            "mb-1 rounded-lg border-l-2 border-[#25D366] bg-[#1a2a35] px-2 py-1 text-xs",
+            "mb-1 rounded-lg border-l-2 border-[#1E88C7] bg-[#1a2a35] px-2 py-1 text-xs",
             isOwn ? "ml-auto" : "",
           )}>
-            <p className="font-medium text-[#25D366]">
+            <p className="font-medium text-[#1E88C7]">
               {(message as Message & { reply_to?: { sender?: { display_name: string } } }).reply_to?.sender?.display_name ?? "Reply"}
             </p>
             <p className="truncate text-zinc-400">
@@ -75,12 +76,12 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
         <div
           className={clsx(
             "relative rounded-2xl px-3 py-2 text-sm",
-            isOwn ? "rounded-tr-sm bg-[#005c4b] text-white" : "rounded-tl-sm bg-[#202c33] text-zinc-100",
+            isOwn ? "rounded-tr-sm bg-[#173B4D] text-white" : "rounded-tl-sm bg-[#202c33] text-zinc-100",
           )}
         >
           {/* Sender name in groups */}
           {!isOwn && message.sender?.display_name && (
-            <p className="mb-0.5 text-[11px] font-semibold text-[#25D366]">
+            <p className="mb-0.5 text-[11px] font-semibold text-[#1E88C7]">
               {message.sender.display_name}
             </p>
           )}
@@ -91,6 +92,8 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             <img src={message.media_url} alt="Image" className="max-h-64 max-w-full rounded-lg" loading="lazy" />
           ) : message.type === "video" && message.media_url ? (
             <video src={message.media_url} controls className="max-h-48 max-w-full rounded-lg" />
+          ) : message.type === "audio" && message.media_url ? (
+            <VoicePlayer url={message.media_url} isOwn={isOwn} />
           ) : (
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
           )}
@@ -112,7 +115,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
                 className={clsx(
                   "rounded-full border px-2 py-0.5 text-xs transition-all hover:scale-110",
                   reactions!.some((r) => r.user_id === message.sender_id)
-                    ? "border-[#25D366]/50 bg-[#25D366]/10"
+                    ? "border-[#1E88C7]/50 bg-[#1E88C7]/10"
                     : "border-zinc-700 bg-[#202c33]",
                 )}
               >

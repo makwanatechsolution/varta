@@ -10,14 +10,40 @@ WhatsApp calls · Telegram groups · Instagram stories — at **$0/month**.
 - **Push:** Firebase Cloud Messaging
 - **Deploy:** GitHub Actions on push to `main`
 
-## Setup
+## 🚀 Ultimate Setup Guide
 
-1. Copy `.env.example` → `.env` and fill in keys
-2. Run Supabase migration: `supabase/migrations/001_initial_schema.sql`
-3. `npm install && npm run dev`
-4. For production: configure Firebase + GitHub secrets, push to `main`
+You are seeing "No connection to database" because you need to link this app to your own free Supabase project.
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full feature maturity roadmap.
+### 1. Database & Authentication Setup
+1. Create a free account at [Supabase](https://supabase.com).
+2. Create a new project.
+3. Go to **Project Settings -> API**.
+4. Copy the `Project URL` and `anon public` key.
+5. In your code folder, duplicate the `.env.example` file and rename it to `.env`.
+6. Paste your URL and Anon Key into the `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` variables.
+
+### 2. Enable Google Login
+Google Login requires configuration directly in your Supabase dashboard (no extra code needed!):
+1. In Supabase, go to **Authentication -> Providers**.
+2. Click **Google** and toggle "Enable Google".
+3. You will need to provide a **Client ID** and **Client Secret**.
+4. To get these, go to the [Google Cloud Console](https://console.cloud.google.com/), create a project, and navigate to **APIs & Services -> Credentials**. Create OAuth Client ID (Web Application) and paste the Supabase Callback URL there.
+5. Paste the ID and Secret back into Supabase and hit Save.
+
+### 3. Enable Voice Messages & Media (Storage)
+For voice notes and image sharing to work, you must create a storage bucket:
+1. In Supabase, go to **Storage**.
+2. Click **New Bucket** and name it exactly `media`.
+3. Mark it as **Public** so audio and images can be read.
+4. Run the SQL schema to enable database rules: copy everything inside `supabase/migrations/001_initial_schema.sql` and paste it into the Supabase **SQL Editor** and run it.
+
+### 4. Run the App
+```bash
+npm install
+npm run dev
+```
+
+For production deployment via Vercel/GitHub Actions, ensure you add these exact `.env` variables into your GitHub Repository Secrets and Vercel Environment Variables.
 
 ## Project structure
 

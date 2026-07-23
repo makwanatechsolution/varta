@@ -33,7 +33,7 @@ export function IncomingCallScreen({ call, callerName, onAccept, onDecline }: In
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="absolute rounded-full border border-[#25D366] transition-all duration-700"
+              className="absolute rounded-full border border-[#1E88C7] transition-all duration-700"
               style={{
                 width: `${80 + i * 24}px`,
                 height: `${80 + i * 24}px`,
@@ -41,11 +41,11 @@ export function IncomingCallScreen({ call, callerName, onAccept, onDecline }: In
               }}
             />
           ))}
-          <div className="h-20 w-20 rounded-full bg-[#25D366]/20 flex items-center justify-center">
+          <div className="h-20 w-20 rounded-full bg-[#1E88C7]/20 flex items-center justify-center">
             {call.type === "video" ? (
-              <Video className="h-8 w-8 text-[#25D366]" />
+              <Video className="h-8 w-8 text-[#1E88C7]" />
             ) : (
-              <Phone className="h-8 w-8 text-[#25D366]" />
+              <Phone className="h-8 w-8 text-[#1E88C7]" />
             )}
           </div>
         </div>
@@ -66,7 +66,7 @@ export function IncomingCallScreen({ call, callerName, onAccept, onDecline }: In
           <button
             type="button"
             onClick={onAccept}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg hover:bg-[#1da855] transition-colors animate-bounce"
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-[#1E88C7] text-white shadow-lg hover:bg-[#1971A5] transition-colors animate-bounce"
           >
             {call.type === "video" ? <Video className="h-7 w-7" /> : <Phone className="h-7 w-7" />}
           </button>
@@ -143,7 +143,7 @@ export function ActiveCallOverlay({
             autoPlay
             playsInline
             muted
-            className="absolute bottom-4 right-4 h-36 w-28 rounded-xl object-cover ring-2 ring-[#25D366]/30 shadow-xl"
+            className="absolute bottom-4 right-4 h-36 w-28 rounded-xl object-cover ring-2 ring-[#1E88C7]/30 shadow-xl"
           />
         )}
 

@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { PresenceStatus } from "../../types/database";
 
 const RING_COLORS: Record<PresenceStatus, string> = {
-  online: "ring-[#25D366]",
+  online: "ring-[#1E88C7]",
   away: "ring-amber-400",
   busy: "ring-red-500",
   dnd: "ring-red-600",
@@ -53,7 +53,7 @@ export function Avatar({ src, name, size = "md", presence, showRing, storyUnseen
 }
 
 export function PresenceLabel({ presence, lastSeen }: { presence: PresenceStatus; lastSeen?: string }) {
-  if (presence === "online") return <span className="text-[#25D366]">online</span>;
+  if (presence === "online") return <span className="text-[#1E88C7]">online</span>;
   if (presence === "away") return <span className="text-amber-400">away</span>;
   if (presence === "busy" || presence === "dnd") return <span className="text-red-400">busy</span>;
   if (lastSeen) {

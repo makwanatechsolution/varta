@@ -7,7 +7,7 @@ import type { Invitation } from "../types/database";
 
 const STATUS_CONFIG = {
   pending: { label: "Pending", icon: Clock, color: "text-amber-400", bg: "bg-amber-400/10" },
-  accepted: { label: "Accepted", icon: CheckCircle, color: "text-[#25D366]", bg: "bg-[#25D366]/10" },
+  accepted: { label: "Accepted", icon: CheckCircle, color: "text-[#1E88C7]", bg: "bg-[#1E88C7]/10" },
   expired: { label: "Expired", icon: XCircle, color: "text-zinc-500", bg: "bg-zinc-800" },
   revoked: { label: "Revoked", icon: XCircle, color: "text-red-400", bg: "bg-red-400/10" },
 };
@@ -17,8 +17,8 @@ function InviteRow({ invite, onRevoke }: { invite: Invitation; onRevoke: () => v
   const Icon = cfg.icon;
   return (
     <div className="flex items-center gap-3 rounded-xl bg-[#111b21] p-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#25D366]/10">
-        <Mail className="h-5 w-5 text-[#25D366]" />
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1E88C7]/10">
+        <Mail className="h-5 w-5 text-[#1E88C7]" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-white text-sm">{invite.email}</p>
@@ -92,8 +92,8 @@ export function InvitePage() {
           <div className="rounded-2xl bg-[#111b21] p-5 shadow-lg">
             {/* Illustration */}
             <div className="mb-5 flex flex-col items-center text-center">
-              <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#25D366]/10">
-                <Mail className="h-8 w-8 text-[#25D366]" />
+              <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#1E88C7]/10">
+                <Mail className="h-8 w-8 text-[#1E88C7]" />
               </div>
               <h2 className="text-lg font-bold text-white">Send an Invite</h2>
               <p className="mt-1 text-sm text-zinc-400 max-w-xs">
@@ -110,7 +110,7 @@ export function InvitePage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="friend@example.com"
                   required
-                  className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-[#25D366]"
+                  className="w-full rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-[#1E88C7]"
                 />
               </div>
               <div>
@@ -122,7 +122,7 @@ export function InvitePage() {
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Hey! Join me on Varta, it's amazing..."
                   rows={2}
-                  className="w-full resize-none rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-[#25D366]"
+                  className="w-full resize-none rounded-xl bg-[#202c33] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-[#1E88C7]"
                 />
               </div>
 
@@ -132,7 +132,7 @@ export function InvitePage() {
                 </div>
               )}
               {success && (
-                <div className="rounded-lg bg-[#25D366]/10 px-3 py-2 text-sm text-[#25D366] border border-[#25D366]/20 flex items-center gap-2">
+                <div className="rounded-lg bg-[#1E88C7]/10 px-3 py-2 text-sm text-[#1E88C7] border border-[#1E88C7]/20 flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   {success}
                 </div>
@@ -141,7 +141,7 @@ export function InvitePage() {
               <button
                 type="submit"
                 disabled={sending || !email.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 font-semibold text-white disabled:opacity-50 hover:bg-[#1da855] transition-colors"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88C7] py-3 font-semibold text-white disabled:opacity-50 hover:bg-[#1971A5] transition-colors"
               >
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 {sending ? "Sending..." : "Send Invite"}

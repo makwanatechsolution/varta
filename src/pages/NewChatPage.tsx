@@ -95,7 +95,7 @@ export function NewChatPage() {
               {selected.map((p) => (
                 <span
                   key={p.id}
-                  className="flex items-center gap-1 rounded-full bg-[#25D366]/20 px-2 py-1 text-xs text-[#25D366]"
+                  className="flex items-center gap-1 rounded-full bg-[#1E88C7]/20 px-2 py-1 text-xs text-[#1E88C7]"
                 >
                   {p.display_name}
                   <button type="button" onClick={() => setSelected((prev) => prev.filter((x) => x.id !== p.id))}>
@@ -141,7 +141,7 @@ export function NewChatPage() {
               key={profile.id}
               type="button"
               onClick={() => handleSelectUser(profile)}
-              className={`flex w-full items-center gap-3 px-4 py-3 hover:bg-[#111b21] transition-colors ${isSelected ? "bg-[#25D366]/10" : ""}`}
+              className={`flex w-full items-center gap-3 px-4 py-3 hover:bg-[#111b21] transition-colors ${isSelected ? "bg-[#1E88C7]/10" : ""}`}
             >
               <Avatar
                 src={profile.avatar_url}
@@ -156,7 +156,7 @@ export function NewChatPage() {
                 )}
               </div>
               {mode === "group" && isSelected && (
-                <div className="h-5 w-5 rounded-full bg-[#25D366] flex items-center justify-center">
+                <div className="h-5 w-5 rounded-full bg-[#1E88C7] flex items-center justify-center">
                   <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
@@ -174,7 +174,7 @@ export function NewChatPage() {
             type="button"
             onClick={handleCreateGroup}
             disabled={creating}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 font-semibold text-white disabled:opacity-50 hover:bg-[#1da855] transition-colors"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E88C7] py-3 font-semibold text-white disabled:opacity-50 hover:bg-[#1971A5] transition-colors"
           >
             <Plus className="h-5 w-5" />
             {creating ? "Creating..." : `Create Group · ${selected.length + 1} members`}

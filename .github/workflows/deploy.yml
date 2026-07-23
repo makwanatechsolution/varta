@@ -1,5 +1,17 @@
 name: Deploy to Vercel Production
 
+# ==============================================================================
+# DEPLOYMENT SETUP INSTRUCTIONS:
+# To make this deployment work, you MUST add the following Repository Secrets 
+# in your GitHub Settings (Settings -> Secrets and variables -> Actions):
+# - VERCEL_ORG_ID
+# - VERCEL_PROJECT_ID
+# - VERCEL_TOKEN
+# - VITE_SUPABASE_URL
+# - VITE_SUPABASE_ANON_KEY
+# 
+# (Google OAuth is handled entirely by Supabase and does not need secrets here)
+# ==============================================================================
 on:
   push:
     branches: [main]

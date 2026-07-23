@@ -1,0 +1,25 @@
+<svg viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6EC6F0"/>
+      <stop offset="100%" stop-color="#1E88C7"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(20,20)">
+    <rect width="180" height="180" rx="40" fill="url(#badgeGrad)"/>
+    <g>
+      <path d="M42 48 h72 a14 14 0 0 1 14 14 v42 a14 14 0 0 1 -14 14 h-50 l-16 18 v-18 h-6 a14 14 0 0 1 -14 -14 v-42 a14 14 0 0 1 14 -14 z" fill="#FFFFFF" fill-opacity="0.45"/>
+      <path d="M66 78 h72 a14 14 0 0 1 14 14 v40 a14 14 0 0 1 -14 14 h-8 v18 l-18 -18 h-46 a14 14 0 0 1 -14 -14 v-40 a14 14 0 0 1 14 -14 z" fill="#FFFFFF"/>
+    </g>
+    <circle cx="86" cy="120" r="6" fill="#1E88C7"/>
+    <circle cx="112" cy="120" r="6" fill="#1E88C7"/>
+    <circle cx="138" cy="120" r="6" fill="#1E88C7"/>
+  </g>
+
+  <g transform="translate(232,70)">
+    <text x="0" y="42" font-family="'Poppins','Segoe UI',Arial,sans-serif" font-size="56" font-weight="700" fill="#173B4D">Varta</text>
+    <text x="4" y="70" font-family="'Noto Sans Devanagari','Segoe UI',Arial,sans-serif" font-size="20" fill="#5A7C8C">वार्ता</text>
+    <text x="4" y="104" font-family="'Segoe UI',Arial,sans-serif" font-size="14" letter-spacing="3.5" fill="#1E88C7" font-weight="600">CONVERSATIONS · CONNECTED</text>
+  </g>
+</svg>

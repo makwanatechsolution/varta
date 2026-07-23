@@ -57,7 +57,7 @@ export function GifPicker({ open, onClose, onSelect }: GifPickerProps) {
               onClick={() => setProvider(p)}
               className={`rounded-md px-3 py-1 text-xs font-semibold capitalize transition-all ${
                 provider === p
-                  ? "bg-[#25D366] text-white shadow"
+                  ? "bg-[#1E88C7] text-white shadow"
                   : "text-zinc-400 hover:text-white"
               }`}
             >
@@ -104,7 +104,7 @@ export function GifPicker({ open, onClose, onSelect }: GifPickerProps) {
             onClick={() => handleCategory(i, cat.q)}
             className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-all ${
               activeCategory === i && !query
-                ? "bg-[#25D366] text-white"
+                ? "bg-[#1E88C7] text-white"
                 : "bg-[#202c33] text-zinc-400 hover:text-white hover:bg-zinc-700"
             }`}
           >
@@ -137,7 +137,7 @@ export function GifPicker({ open, onClose, onSelect }: GifPickerProps) {
                 key={gif.id}
                 type="button"
                 onClick={() => { onSelect(gif); onClose(); }}
-                className="group relative w-full overflow-hidden rounded-lg hover:ring-2 hover:ring-[#25D366] transition-all"
+                className="group relative w-full overflow-hidden rounded-lg hover:ring-2 hover:ring-[#1E88C7] transition-all"
               >
                 <img
                   src={gif.preview}

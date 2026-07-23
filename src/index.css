@@ -14,8 +14,7 @@ body,
 body {
   font-family: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #0b141a;
-  color: #e9edef;
+  @apply bg-[#FBF6EE] text-[#26211B] dark:bg-[#12181A] dark:text-[#F2ECDF];
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
@@ -90,7 +89,7 @@ body {
 }
 
 .emoji-picker__tab.active {
-  background: #25D366/20;
+  background: #1E88C7/20;
   background-color: rgba(37, 211, 102, 0.15);
   opacity: 1;
 }

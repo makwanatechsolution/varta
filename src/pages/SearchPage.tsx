@@ -26,7 +26,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, i) =>
         regex.test(part) ? (
-          <mark key={i} className="bg-[#25D366]/30 text-[#25D366] rounded px-0.5">
+          <mark key={i} className="bg-[#1E88C7]/30 text-[#1E88C7] rounded px-0.5">
             {part}
           </mark>
         ) : (
@@ -176,7 +176,7 @@ export function SearchPage() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && query.trim() && handleSearch(query)}
               placeholder="Search messages, people, groups..."
-              className="w-full rounded-xl bg-[#202c33] py-2.5 pl-10 pr-10 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#25D366]/50"
+              className="w-full rounded-xl bg-[#202c33] py-2.5 pl-10 pr-10 text-sm text-white outline-none placeholder:text-zinc-500 focus:ring-1 focus:ring-[#1E88C7]/50"
             />
             {query && (
               <button
@@ -202,14 +202,14 @@ export function SearchPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors border-b-2 ${
                   activeTab === tab.id
-                    ? "border-[#25D366] text-[#25D366]"
+                    ? "border-[#1E88C7] text-[#1E88C7]"
                     : "border-transparent text-zinc-400 hover:text-white"
                 }`}
               >
                 {tab.label}
                 {tab.count > 0 && (
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    activeTab === tab.id ? "bg-[#25D366]/20 text-[#25D366]" : "bg-zinc-700 text-zinc-400"
+                    activeTab === tab.id ? "bg-[#1E88C7]/20 text-[#1E88C7]" : "bg-zinc-700 text-zinc-400"
                   }`}>
                     {tab.count}
                   </span>
@@ -311,7 +311,7 @@ export function SearchPage() {
                   )}
                 </div>
                 <span className={`h-2 w-2 rounded-full shrink-0 ${
-                  profile.presence === "online" ? "bg-[#25D366]" :
+                  profile.presence === "online" ? "bg-[#1E88C7]" :
                   profile.presence === "away" ? "bg-amber-400" :
                   profile.presence === "busy" ? "bg-red-500" : "bg-zinc-600"
                 }`} />

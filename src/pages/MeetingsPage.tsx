@@ -88,7 +88,7 @@ export function MeetingsPage() {
             ? "bg-red-500/20 text-red-400"
             : meeting.status === "ended"
             ? "bg-zinc-800 text-zinc-500"
-            : "bg-[#25D366]/20 text-[#25D366]"
+            : "bg-[#1E88C7]/20 text-[#1E88C7]"
         }`}>
           {meeting.status === "live" ? "● LIVE" : meeting.status.toUpperCase()}
         </span>
@@ -116,7 +116,7 @@ export function MeetingsPage() {
           <button
             type="button"
             onClick={() => copyLink(meeting.join_link, meeting.id)}
-            className="flex items-center gap-1.5 rounded-lg bg-[#25D366]/20 px-3 py-1.5 text-xs font-medium text-[#25D366] hover:bg-[#25D366]/30 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-[#1E88C7]/20 px-3 py-1.5 text-xs font-medium text-[#1E88C7] hover:bg-[#1E88C7]/30 transition-colors"
           >
             {copiedId === meeting.id ? <Check className="h-3.5 w-3.5" /> : <Video className="h-3.5 w-3.5" />}
             {copiedId === meeting.id ? "Copied!" : "Copy join link"}
@@ -145,7 +145,7 @@ export function MeetingsPage() {
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 rounded-full bg-[#25D366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1da855] transition-colors"
+          className="flex items-center gap-1.5 rounded-full bg-[#1E88C7] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1971A5] transition-colors"
         >
           <Plus className="h-4 w-4" />
           Schedule
@@ -209,7 +209,7 @@ export function MeetingsPage() {
                   onChange={(e) => setTitle(e.target.value)}
                   required
                   placeholder="Weekly sync, Design review..."
-                  className="mt-1 w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-[#25D366]"
+                  className="mt-1 w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-[#1E88C7]"
                 />
               </label>
 
@@ -220,7 +220,7 @@ export function MeetingsPage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
                   placeholder="Agenda, notes..."
-                  className="mt-1 w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 resize-none focus:ring-1 focus:ring-[#25D366]"
+                  className="mt-1 w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 resize-none focus:ring-1 focus:ring-[#1E88C7]"
                 />
               </label>
 
@@ -232,13 +232,13 @@ export function MeetingsPage() {
                   onChange={(e) => setScheduledAt(e.target.value)}
                   required
                   min={new Date().toISOString().slice(0, 16)}
-                  className="mt-1 w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none [color-scheme:dark] focus:ring-1 focus:ring-[#25D366]"
+                  className="mt-1 w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none [color-scheme:dark] focus:ring-1 focus:ring-[#1E88C7]"
                 />
               </label>
 
               <label className="flex items-center gap-3 cursor-pointer">
                 <div
-                  className={`relative h-6 w-10 rounded-full transition-colors ${waitingRoom ? "bg-[#25D366]" : "bg-zinc-700"}`}
+                  className={`relative h-6 w-10 rounded-full transition-colors ${waitingRoom ? "bg-[#1E88C7]" : "bg-zinc-700"}`}
                   onClick={() => setWaitingRoom((v) => !v)}
                 >
                   <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${waitingRoom ? "translate-x-4" : ""}`} />
@@ -257,7 +257,7 @@ export function MeetingsPage() {
                 <button
                   type="submit"
                   disabled={creating || !title.trim() || !scheduledAt}
-                  className="flex-1 rounded-xl bg-[#25D366] py-2.5 text-sm font-semibold text-white disabled:opacity-50 hover:bg-[#1da855] transition-colors"
+                  className="flex-1 rounded-xl bg-[#1E88C7] py-2.5 text-sm font-semibold text-white disabled:opacity-50 hover:bg-[#1971A5] transition-colors"
                 >
                   {creating ? "Scheduling..." : "Schedule"}
                 </button>
