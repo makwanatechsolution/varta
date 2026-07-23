@@ -1,29 +1,47 @@
-# Varta – The Zero-Cost Deployment Guide
+# 🚀 Varta – Complete Setup & Zero-Cost Deployment Guide
 
-This document outlines everything you need to set up, deploy, and run the complete Varta application using our AI-architected truly zero-cost stack. We use **Vercel** for hosting and serverless functions to avoid any "pay-as-you-go" credit card requirements.
-
----
-
-## 🏗️ Architecture Overview
-
-- **Frontend Hosting & Serverless Functions:** [Vercel](https://vercel.com/) (Hobby tier is 100% free, no credit card required).
-- **Backend & Database:** [Supabase](https://supabase.com/) (Free tier) providing PostgreSQL, Realtime WebSockets, Storage, and Authentication.
-- **Push Notifications:** Firebase Cloud Messaging (FCM) — completely free for push notifications. The logic to trigger notifications runs securely on Vercel.
-- **WebRTC TURN Server:** [Metered Video](https://www.metered.ca/stun-turn) (Free tier offers 50 GB/mo TURN usage — **no credit card required**).
-- **Transactional Emails:** Resend API (Free tier - 3k emails/month).
-- **GIFs:** Tenor & Giphy (Free developer APIs).
+This guide provides step-by-step instructions to set up, configure, deploy, and run the complete **Varta** application. The entire stack is architected to run on 100% free tiers without requiring credit card details or incurring unexpected costs.
 
 ---
 
-## 1. Supabase Setup (Database & Realtime)
+## 🏗️ Stack Architecture Overview
 
-1. Go to [Supabase](https://supabase.com/) and create a new project.
-2. Go to **Project Settings -> API** and get your `Project URL`, `anon public` key, and `service_role` secret key.
-3. Add these to your `.env` file (see `.env.example`).
-4. Go to the **SQL Editor** in Supabase and run the following files from your `supabase/migrations` folder in order:
-   - `001_initial_schema.sql`
-   - `002_feature_additions.sql`
-5. Go to **Database -> Publications**, edit the `supabase_realtime` publication, and ensure these tables are checked:
+| Component | Provider | Tier / Free Quota |
+| :--- | :--- | :--- |
+| **Frontend & API Hosting** | [Vercel](https://vercel.com/) | Hobby (100% Free, Serverless Functions) |
+| **Database & Auth & Realtime** | [Supabase](https://supabase.com/) | Free (Postgres, Auth, Storage, WebSockets) |
+| **Push Notifications** | [Firebase FCM](https://console.firebase.google.com/) | Spark (Free Web Push notifications) |
+| **WebRTC TURN Server** | [Metered Video](https://www.metered.ca/stun-turn) | Free (50 GB/month TURN bandwidth) |
+| **Transactional Email** | [Resend](https://resend.com/) | Free (3,000 emails/month) |
+| **GIF Search** | [Tenor](https://developers.google.com/tenor) / [Giphy](https://developers.giphy.com/) | Free Developer APIs |
+| **CI/CD** | [GitHub Actions](https://github.com/features/actions) | Free (Automated deployment to Vercel) |
+
+---
+
+## 1. Supabase Setup (Database, Auth, Storage & Migrations)
+
+### A. Create Project & Obtain Keys
+1. Sign up / Log into [Supabase](https://supabase.com/).
+2. Create a new project (e.g., `varta-app`).
+3. Go to **Project Settings -> API** and copy:
+   - **Project URL** (`VITE_SUPABASE_URL`)
+   - **anon / public key** (`VITE_SUPABASE_ANON_KEY`)
+   - **service_role secret key** (`SUPABASE_SERVICE_ROLE_KEY`)
+
+### B. Run SQL Migrations (In Exact Order)
+Go to the **SQL Editor** in your Supabase dashboard and execute all SQL files from `supabase/migrations/` **in exact numerical order**:
+
+1. **`001_initial_schema.sql`** — Creates core tables (`profiles`, `conversations`, `messages`, `presence`, `statuses`, `meetings`), RLS policies, and utility functions.
+2. **`002_admin_approval.sql`** — Adds admin approval status columns and approval request functions.
+3. **`002_feature_additions.sql`** — Adds invitations table, meeting permissions, and message reaction structures.
+4. **`003_fix_500_error.sql`** — Solves function execution errors and updates trigger handlers.
+5. **`004_fix_infinite_recursion.sql`** — Fixes RLS recursive query loops on conversation lookups.
+6. **`005_ultimate_rls_fix.sql`** — Applies finalized, high-performance RLS access controls across all tables.
+
+### C. Enable Realtime Replication
+1. Go to **Database -> Publications** in Supabase.
+2. Click on `supabase_realtime`.
+3. Ensure all of the following tables are toggled **ON**:
    - `conversations`
    - `messages`
    - `message_read_receipts`
@@ -32,115 +50,152 @@ This document outlines everything you need to set up, deploy, and run the comple
    - `invitations`
    - `statuses`
    - `meetings`
-6. Go to **Storage**, create a new bucket named `media`, and set it to **Public**.
+
+### D. Create Media Storage Bucket
+1. Go to **Storage -> Buckets** in Supabase.
+2. Click **New Bucket**.
+3. Set the Name to exactly **`media`**.
+4. Enable the **Public** toggle (required for sharing images, voice notes, and avatar uploads).
+
+### E. Grant Yourself Admin Permissions
+To access the Admin Panel and approve new user signups, run this query in the Supabase SQL Editor after signing up your initial user account:
+
+```sql
+UPDATE profiles
+SET role = 'admin', is_approved = true
+WHERE email = 'your-email@example.com';
+```
 
 ---
 
-## 2. Firebase Setup (Push Notifications ONLY)
+## 2. Firebase Setup (Web Push Notifications)
 
-We only use Firebase for Cloud Messaging (Web Push). You do not need to upgrade to Blaze.
+Firebase Cloud Messaging (FCM) handles background push notifications when users are offline.
 
-1. Go to the [Firebase Console](https://console.firebase.google.com/) and create a project (stay on the free Spark plan).
-2. Go to **Project Settings -> General**, add a Web App, and copy the `firebaseConfig` block. Add these to your `.env` file.
-3. Go to **Project Settings -> Cloud Messaging -> Web Push certificates**, generate a key pair, and add it to `.env` as `VITE_FIREBASE_VAPID_KEY`.
-4. Go to **Project Settings -> Service Accounts**, click "Generate new private key". Open the downloaded JSON file. You will need to stringify this JSON and add it to your Vercel environment variables as `FIREBASE_SERVICE_ACCOUNT_KEY`.
-
----
-
-## 3. WebRTC TURN Server (Metered Video)
-
-To allow voice and video calls to connect reliably across restrictive networks (like corporate WiFi or mobile networks), you need a TURN server. We use Metered Video because they offer a generous free tier without requiring a credit card.
-
-1. Go to [Metered Video TURN](https://www.metered.ca/stun-turn).
-2. Click **Create Free Account** (no credit card required).
-3. Look at your dashboard to find your **Metered Domain** and **Secret Key**.
-4. Add these exact credentials to your `.env` (and later, GitHub Secrets):
-   - `VITE_TURN_SERVER_URL` = (Your Metered Domain, e.g., `varta.metered.live`)
-   - `VITE_TURN_CREDENTIAL` = (Your Secret Key)
-   - `VITE_TURN_USERNAME` = *(Leave this completely blank)*
-
-## 4. Transactional Emails (Resend)
-
-To send the beautifully formatted HTML invite emails, we use Resend (free tier includes 3,000 emails per month).
-
-1. Go to [Resend](https://resend.com/) and create a free account.
-2. Go to **API Keys** and create a new key.
-3. If you want to send emails from your own domain (e.g., `invite@your-godaddy-domain.com`), go to **Domains** and verify your GoDaddy domain. Otherwise, you can use Resend's testing domain.
-4. Add the API Key to your `.env` (and GitHub Secrets) as `RESEND_API_KEY`.
-
----
-
-## 5. Vercel Deployment (via GitHub Actions)
-
-We use GitHub Actions as the single source of truth for deployment and environment variables. You do not need to configure any environment variables in the Vercel Dashboard.
-
-1. **Get Vercel Credentials:**
-   - Log into [Vercel](https://vercel.com/) and create a new project (select the empty project or link it initially just to get the IDs).
-   - Go to your Vercel Account Settings -> Tokens and generate a `VERCEL_TOKEN`.
-   - In your Vercel Project Settings, copy the `ProjectId` (`VERCEL_PROJECT_ID`).
-   - In your Vercel Team/Account Settings, copy the `OrgId` (`VERCEL_ORG_ID`).
-
-2. **Add GitHub Secrets:**
-   Go to your GitHub repository -> **Settings -> Secrets and variables -> Actions**.
-   Add the following repository secrets exactly as named:
-
-   **Vercel Core Credentials:**
-   - `VERCEL_TOKEN`
-   - `VERCEL_ORG_ID`
-   - `VERCEL_PROJECT_ID`
-
-   **Supabase (Database & Auth):**
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-
-   **Firebase (Push Notifications):**
+1. Open the [Firebase Console](https://console.firebase.google.com/) and create a project (stay on the free Spark plan).
+2. Go to **Project Settings -> General** and click **Add app -> Web (`</>`)**.
+3. Register the web app and copy the `firebaseConfig` object values into your `.env`:
    - `VITE_FIREBASE_API_KEY`
    - `VITE_FIREBASE_AUTH_DOMAIN`
    - `VITE_FIREBASE_PROJECT_ID`
    - `VITE_FIREBASE_MESSAGING_SENDER_ID`
    - `VITE_FIREBASE_APP_ID`
-   - `VITE_FIREBASE_VAPID_KEY`
-   - `FIREBASE_SERVICE_ACCOUNT_KEY` *(Paste the minified raw JSON string from your downloaded Firebase private key)*
-
-   **WebRTC TURN (Metered.ca):**
-   - `VITE_TURN_SERVER_URL` *(Your Metered Domain, e.g., varta.metered.live)*
-   - `VITE_TURN_CREDENTIAL` *(Your Secret Key)*
-   - `VITE_TURN_USERNAME` *(Leave this blank or do not add it)*
-
-   **Third-Party Services:**
-   - `VITE_TENOR_API_KEY`
-   - `VITE_GIPHY_API_KEY`
-   - `RESEND_API_KEY`
-
-   **Application Configuration:**
-   - `VITE_APP_URL` *(e.g., https://your-godaddy-domain.com)*
-
-3. **Deploy:**
-   Whenever you push to the `main` branch, GitHub Actions will securely inject your secrets, build the React app, and deploy the frontend + serverless backend directly to Vercel.
+4. Go to **Project Settings -> Cloud Messaging -> Web Push certificates**, click **Generate Key Pair**, and copy the public key as `VITE_FIREBASE_VAPID_KEY`.
+5. Go to **Project Settings -> Service Accounts**, click **Generate new private key**, and save the JSON file. You will minify and pass this JSON string to Vercel/GitHub Actions as `FIREBASE_SERVICE_ACCOUNT_KEY`.
 
 ---
 
-## 6. Custom Domain (GoDaddy)
+## 3. WebRTC TURN Server (Metered Video)
 
-1. In the Vercel dashboard for your project, go to **Settings -> Domains**.
-2. Add your GoDaddy domain.
-3. Vercel will give you Nameservers or an A/CNAME record.
-4. Go to GoDaddy DNS management and update the records to match what Vercel provided.
-5. Vercel automatically provisions a free SSL certificate.
+To connect voice and video calls through firewalls and NATs, a TURN server is required.
+
+1. Register at [Metered Video TURN](https://www.metered.ca/stun-turn) (Free 50 GB/mo tier, no credit card required).
+2. Go to your dashboard to obtain your **Metered Domain** and **Secret Key**.
+3. Add these credentials to your `.env` and GitHub Secrets:
+   - `VITE_TURN_SERVER_URL` = `turn:your-subdomain.metered.live:3478`
+   - `VITE_TURN_CREDENTIAL` = `your-secret-key`
+   - `VITE_TURN_USERNAME` = `your-username` (or leave blank depending on metered setup)
+
+---
+
+## 4. Transactional Email Setup (Resend)
+
+Resend handles custom HTML user invitations and approval notification emails.
+
+1. Sign up for a free account at [Resend](https://resend.com/).
+2. Go to **API Keys** and generate a new API key (`RESEND_API_KEY`).
+3. *(Optional)* Verify your custom domain under **Domains** (e.g. `mail.yourdomain.com`). By default, testing mode allows sending to your registered email.
+
+---
+
+## 5. Deployment via Vercel & GitHub Actions
+
+Deployment is automated via GitHub Actions on every push to the `main` branch.
+
+### A. Obtain Vercel Credentials
+1. Log into [Vercel](https://vercel.com/) and create a new project linked to your repository.
+2. Go to **Account Settings -> Tokens** and generate a personal token (`VERCEL_TOKEN`).
+3. Copy the **Project ID** (`VERCEL_PROJECT_ID`) from your Vercel Project Settings.
+4. Copy your **Team/Account ID** (`VERCEL_ORG_ID`) from Vercel Account Settings.
+
+### B. Configure GitHub Repository Secrets
+Navigate to your GitHub repository -> **Settings -> Secrets and variables -> Actions**, and add the following repository secrets:
+
+#### Vercel Deployment Secrets
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+#### Supabase Secrets
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+#### Firebase Push Secrets
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_VAPID_KEY`
+- `FIREBASE_SERVICE_ACCOUNT_KEY` *(Raw single-line JSON string of your Firebase service account file)*
+
+#### WebRTC TURN Secrets
+- `VITE_TURN_SERVER_URL`
+- `VITE_TURN_CREDENTIAL`
+- `VITE_TURN_USERNAME`
+
+#### Third-Party & App Secrets
+- `VITE_TENOR_API_KEY`
+- `VITE_GIPHY_API_KEY`
+- `RESEND_API_KEY`
+- `VITE_APP_URL` *(e.g. `https://varta.yourdomain.com`)*
+
+### C. Trigger Deployment
+Pushing to the `main` branch automatically triggers `.github/workflows/deploy.yml` to build the app and deploy frontend & serverless API endpoints to Vercel.
+
+---
+
+## 6. Custom Domain Setup (GoDaddy / Custom DNS)
+
+1. In Vercel, open your project -> **Settings -> Domains**.
+2. Add your domain (e.g. `varta.yourdomain.com`).
+3. Vercel will provide A / CNAME records or Nameservers.
+4. Log into GoDaddy (or your DNS provider), open **DNS Management**, and add the specified CNAME/A records pointing to Vercel.
+5. Vercel automatically generates an SSL certificate once DNS propagates.
 
 ---
 
 ## 7. Running Locally
 
-Ensure your `.env` file is fully populated using `.env.example` as a template.
+1. Duplicate `.env.example` to `.env` and fill in all variables:
+   ```bash
+   cp .env.example .env
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start local development server:
+   ```bash
+   npm run dev
+   ```
+4. Access the web app at `http://localhost:5173`.
 
-```bash
-# Install dependencies
-npm install
+---
 
-# Start the local development server
-npm run dev
-```
+## 🔍 Troubleshooting & FAQ
 
-Visit `http://localhost:5173`. You now have a full-featured, truly zero-cost, massively scalable social app! 🚀
+### Database returns "No connection to database" or RLS 500 error
+- Ensure you executed **all 6 migration files** in exact numerical order (`001` through `005`).
+- Verify that `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` match your Supabase API settings.
+
+### Realtime messages or presence not updating live
+- Confirm all 8 required tables are enabled under **Supabase -> Database -> Publications -> `supabase_realtime`**.
+
+### Push notifications fail to send
+- Ensure `FIREBASE_SERVICE_ACCOUNT_KEY` is a valid single-line stringified JSON object in your Vercel secrets.
+- Verify `VITE_FIREBASE_VAPID_KEY` matches the Web Push certificate generated in Firebase Console.
+
+### WebRTC audio/video call fails on mobile networks
+- Ensure `VITE_TURN_SERVER_URL` and `VITE_TURN_CREDENTIAL` are configured correctly with Metered.ca.

@@ -1,61 +1,109 @@
-# Varta
+# 💬 Varta
 
-WhatsApp calls · Telegram groups · Instagram stories — at **$0/month**.
+> Modern, zero-cost real-time communication platform — WhatsApp calls, Telegram groups, and Instagram stories at **$0/month**.
 
-## Tech stack
+[![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?style=flat&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![React](https://img.shields.io/badge/React-19.x-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Realtime-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployment-000000?style=flat&logo=vercel&logoColor=white)](https://vercel.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- **Frontend:** Vite + React + TypeScript + Tailwind CSS
-- **Backend:** Supabase (Postgres, Auth, Realtime, Storage)
-- **Hosting:** Firebase Hosting (custom GoDaddy domain)
-- **Push:** Firebase Cloud Messaging
-- **Deploy:** GitHub Actions on push to `main`
+---
 
-## 🚀 Ultimate Setup Guide
+## ✨ Features
 
-You are seeing "No connection to database" because you need to link this app to your own free Supabase project.
+- 💬 **Real-time Chat:** Instant messaging with read receipts, typing indicators, message reactions, and emoji picker.
+- 📞 **Voice & Video Calls:** 1-on-1 & group calls powered by WebRTC with STUN/TURN relay for restrictive networks.
+- 📸 **Stories & Statuses:** Share disappearing status updates and stories with media attachments.
+- 👥 **Groups & Channels:** Public & private group channels with role-based access and invite links.
+- 🎙️ **Voice Notes & Media:** Built-in audio recorder, image sharing, and GIF integration (Tenor & Giphy).
+- 🛡️ **Admin Approval Workflow:** Secure signup approval pipeline for controlled user onboarding.
+- 🔔 **Push & Email Alerts:** Firebase Web Push notifications and rich HTML email invitations via Resend.
+- 💰 **100% Free Hosting:** Zero-cost architecture utilizing free tiers of Vercel, Supabase, Firebase, and Metered Video.
 
-### 1. Database & Authentication Setup
-1. Create a free account at [Supabase](https://supabase.com).
-2. Create a new project.
-3. Go to **Project Settings -> API**.
-4. Copy the `Project URL` and `anon public` key.
-5. In your code folder, duplicate the `.env.example` file and rename it to `.env`.
-6. Paste your URL and Anon Key into the `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` variables.
+---
 
-### 2. Enable Google Login
-Google Login requires configuration directly in your Supabase dashboard (no extra code needed!):
-1. In Supabase, go to **Authentication -> Providers**.
-2. Click **Google** and toggle "Enable Google".
-3. You will need to provide a **Client ID** and **Client Secret**.
-4. To get these, go to the [Google Cloud Console](https://console.cloud.google.com/), create a project, and navigate to **APIs & Services -> Credentials**. Create OAuth Client ID (Web Application) and paste the Supabase Callback URL there.
-5. Paste the ID and Secret back into Supabase and hit Save.
+## 🛠️ Tech Stack
 
-### 3. Enable Voice Messages & Media (Storage)
-For voice notes and image sharing to work, you must create a storage bucket:
-1. In Supabase, go to **Storage**.
-2. Click **New Bucket** and name it exactly `media`.
-3. Mark it as **Public** so audio and images can be read.
-4. Run the SQL schema to enable database rules: copy everything inside `supabase/migrations/001_initial_schema.sql` and paste it into the Supabase **SQL Editor** and run it.
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | React 19, Vite 8, TypeScript, Tailwind CSS v4, Framer Motion, Lucide Icons |
+| **Database & Auth** | Supabase (PostgreSQL, Realtime WebSockets, Row Level Security, Storage) |
+| **Serverless Backend** | Vercel Serverless Functions (`/api/*`) |
+| **Push Notifications**| Firebase Cloud Messaging (FCM Web Push) |
+| **Email Delivery** | Resend API |
+| **WebRTC Relay** | Metered Video Free Tier (50 GB/mo TURN bandwidth) |
+| **CI/CD & Hosting** | GitHub Actions + Vercel Production Deployment |
 
-### 4. Run the App
+---
+
+## 🚀 Quick Start (Local Development)
+
+### 1. Prerequisites
+- Node.js 20+ installed
+- A free [Supabase](https://supabase.com) account
+
+### 2. Environment Setup
+Clone the repository and copy the environment template:
+
+```bash
+git clone https://github.com/makwanatechsolution/varta.git
+cd varta
+cp .env.example .env
+```
+
+Fill in your `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env`. See [SETUP.md](SETUP.md) for full configuration details.
+
+### 3. Database Migration
+In your Supabase project's **SQL Editor**, execute the migration scripts located in `supabase/migrations/` in the following exact order:
+
+1. `001_initial_schema.sql` — Core database tables, triggers, and storage RLS
+2. `002_admin_approval.sql` — Admin approval and user status controls
+3. `002_feature_additions.sql` — Feature extensions (invitations, meetings, reactions)
+4. `003_fix_500_error.sql` — Database function & trigger error handling
+5. `004_fix_infinite_recursion.sql` — RLS policy recursion optimization
+6. `005_ultimate_rls_fix.sql` — Finalized access control policies
+
+Also create a public storage bucket named **`media`** under **Storage -> Buckets**.
+
+### 4. Run Development Server
+
 ```bash
 npm install
 npm run dev
 ```
 
-For production deployment via Vercel/GitHub Actions, ensure you add these exact `.env` variables into your GitHub Repository Secrets and Vercel Environment Variables.
+Open `http://localhost:5173` in your browser.
 
-## Project structure
+---
+
+## 📖 Deployment Guide
+
+For step-by-step instructions on setting up free services (Supabase, Firebase Push, Metered TURN, Resend, Vercel, and custom domain setup via GoDaddy), read the complete [SETUP.md](SETUP.md).
+
+---
+
+## 📁 Project Structure
 
 ```
-src/
-├── components/   # UI (chat, calls, stories, layout)
-├── contexts/     # Auth
-├── hooks/        # presence, chat, calling, stories, GIFs, reactions
-├── lib/          # Supabase + Firebase clients
-├── pages/        # Routes
-└── types/        # TypeScript types
-supabase/migrations/  # Database schema + RLS
-functions/            # Firebase Cloud Functions
-.github/workflows/    # CI/CD deploy
+varta/
+├── api/                    # Vercel Serverless API Functions (email, push, admin alerts)
+├── public/                 # Static assets & service workers (firebase-messaging-sw.js)
+├── src/
+│   ├── components/        # React UI components (chat, calling, stories, settings)
+│   ├── contexts/          # React Context providers (Auth, Theme, Sound)
+│   ├── hooks/             # Custom hooks (presence, chat, calls, stories, reactions)
+│   ├── lib/               # Supabase & Firebase client initialization
+│   ├── pages/             # Route pages (Chat, Admin, Auth, Meetings)
+│   └── types/             # TypeScript type definitions
+├── supabase/
+│   └── migrations/        # Sequential PostgreSQL migration scripts
+└── .github/workflows/     # CI/CD workflow for automated Vercel deployment
 ```
+
+---
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
