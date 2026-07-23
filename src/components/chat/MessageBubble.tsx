@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { format } from "date-fns";
-import { Smile, Reply, Edit2, Trash2, Phone, Video } from "lucide-react";
+import { Smile, Reply, Edit2, Trash2, Phone, Video, Copy, Forward } from "lucide-react";
 import type { Message } from "../../types/database";
 import { useReactions, EmojiPickerPanel } from "../../hooks/useReactions";
 import { Avatar } from "../ui/Avatar";
@@ -21,7 +21,16 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
   const [showPicker, setShowPicker] = useState(false);
   const [showReactors, setShowReactors] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [contextMenu]);
 
   const grouped = (message.reactions ?? []).reduce<Record<string, typeof message.reactions>>((acc, r) => {
     if (!acc[r.emoji]) acc[r.emoji] = [];
@@ -86,8 +95,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
         <div
           onContextMenu={(e) => {
             e.preventDefault();
-            // TODO: Open native-feeling custom context menu (Reply, Edit, Delete, Forward)
-            console.log("Context menu triggered for message", message.id);
+            setContextMenu({ x: e.clientX, y: e.clientY });
           }}
           className={clsx(
             "relative px-4 py-2.5 text-[15px] leading-relaxed shadow-sm transition-all cursor-default",
@@ -269,6 +277,66 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
                   </button>
                 </div>
               </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Context Menu Overlay */}
+        <AnimatePresence>
+          {contextMenu && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+              className="fixed z-[150] w-48 rounded-xl bg-surface/95 backdrop-blur-xl border border-border-subtle p-1 shadow-2xl flex flex-col"
+            >
+              {onReply && (
+                <button
+                  onClick={onReply}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-main hover:bg-primary hover:text-white transition-colors"
+                >
+                  <Reply className="h-4 w-4" /> Reply
+                </button>
+              )}
+              {message.type === "text" && message.content && (
+                <button
+                  onClick={() => navigator.clipboard.writeText(message.content!)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-main hover:bg-primary hover:text-white transition-colors"
+                >
+                  <Copy className="h-4 w-4" /> Copy Text
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  alert("Forwarding coming soon!");
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-main hover:bg-primary hover:text-white transition-colors"
+              >
+                <Forward className="h-4 w-4" /> Forward
+              </button>
+              
+              {(isOwn && message.type === "text" && onEdit) || (isOwn && onDelete) ? (
+                <div className="my-1 border-t border-border-subtle" />
+              ) : null}
+
+              {isOwn && message.type === "text" && onEdit && (
+                <button
+                  onClick={onEdit}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-main hover:bg-primary hover:text-white transition-colors"
+                >
+                  <Edit2 className="h-4 w-4" /> Edit Message
+                </button>
+              )}
+              {isOwn && onDelete && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-error hover:bg-error hover:text-white transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </button>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
