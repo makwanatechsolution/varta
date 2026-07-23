@@ -36,16 +36,49 @@ if (firebaseConfig.apiKey) {
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
-    const notificationTitle = payload.notification?.title || 'Varta';
+    const title = payload.notification?.title || payload.data?.title || payload.data?.senderName || 'Varta';
+    const body = payload.notification?.body || payload.data?.body || payload.data?.preview || 'New message received';
+    const icon = payload.notification?.icon || payload.data?.icon || `${self.location.origin}/favicon.svg`;
+
     const notificationOptions = {
-      body: payload.notification?.body,
-      icon: '/vite.svg',
-      data: payload.data, // Contains click_action, conversation_id, etc.
+      body: body,
+      icon: icon,
+      badge: `${self.location.origin}/favicon.svg`,
+      tag: payload.data?.conversationId || 'varta-push',
+      data: payload.data || {},
     };
 
-    self.registration.showNotification(notificationTitle, notificationOptions);
+    self.registration.showNotification(title, notificationOptions);
   });
 }
+
+// Fallback native Push event listener
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  try {
+    const payload = event.data.json();
+    console.log('[firebase-messaging-sw.js] Native push event received: ', payload);
+
+    const title = payload.notification?.title || payload.data?.title || payload.data?.senderName || 'Varta';
+    const body = payload.notification?.body || payload.data?.body || payload.data?.preview || 'New message received';
+    const icon = payload.notification?.icon || payload.data?.icon || `${self.location.origin}/favicon.svg`;
+
+    const notificationOptions = {
+      body: body,
+      icon: icon,
+      badge: `${self.location.origin}/favicon.svg`,
+      tag: payload.data?.conversationId || 'varta-push',
+      data: payload.data || {},
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(title, notificationOptions)
+    );
+  } catch (err) {
+    console.warn('[firebase-messaging-sw.js] Could not parse push payload as JSON:', err);
+  }
+});
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {

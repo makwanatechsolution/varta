@@ -54,9 +54,23 @@ export default async function handler(req: any, res: any) {
       tokens: tokens.map((t: any) => t.token),
       notification: { title, body },
       data: {
+        title,
+        body,
         conversationId,
         type: "message",
         click_action: `/chat`,
+        icon: `/favicon.svg`,
+      },
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: `/favicon.svg`,
+          badge: `/favicon.svg`,
+        },
+        fcmOptions: {
+          link: `/chat`,
+        },
       },
     });
 
