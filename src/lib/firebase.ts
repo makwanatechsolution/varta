@@ -12,35 +12,61 @@ const firebaseConfig = {
 export const firebaseApp = initializeApp(firebaseConfig);
 
 async function registerServiceWorker() {
-  if ("serviceWorker" in navigator) {
-    const params = new URLSearchParams(firebaseConfig as any).toString();
-    return navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
+  if (!("serviceWorker" in navigator)) return undefined;
+
+  const params = new URLSearchParams(firebaseConfig as any).toString();
+  const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${params}`);
+
+  if (registration.active) {
+    return registration;
   }
-  return undefined;
+
+  const sw = registration.installing || registration.waiting;
+  if (sw) {
+    await new Promise<void>((resolve) => {
+      sw.addEventListener("statechange", (e: any) => {
+        if (e.target.state === "activated" || registration.active) {
+          resolve();
+        }
+      });
+      setTimeout(resolve, 2000);
+    });
+  }
+
+  await navigator.serviceWorker.ready;
+  return registration;
 }
 
 export async function requestPushPermission(userId: string) {
-  const supported = await isSupported();
-  if (!supported) return null;
+  try {
+    const supported = await isSupported();
+    if (!supported) return null;
 
-  const messaging = getMessaging(firebaseApp);
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return null;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return null;
 
-  const token = await getToken(messaging, {
-    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-    serviceWorkerRegistration: await registerServiceWorker(),
-  });
+    const registration = await registerServiceWorker();
+    if (!registration) return null;
 
-  if (token) {
-    const { supabase } = await import("./supabase");
-    await supabase.from("push_tokens").upsert(
-      { user_id: userId, token, platform: "web" },
-      { onConflict: "user_id,token" },
-    );
+    const messaging = getMessaging(firebaseApp);
+    const token = await getToken(messaging, {
+      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: registration,
+    });
+
+    if (token) {
+      const { supabase } = await import("./supabase");
+      await supabase.from("push_tokens").upsert(
+        { user_id: userId, token, platform: "web" },
+        { onConflict: "user_id,token" },
+      );
+    }
+
+    return token;
+  } catch (err) {
+    console.warn("Failed to subscribe to push notifications:", err);
+    return null;
   }
-
-  return token;
 }
 
 export function onForegroundMessage(callback: (payload: unknown) => void) {

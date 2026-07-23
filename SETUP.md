@@ -212,3 +212,10 @@ Pushing to the `main` branch automatically triggers `.github/workflows/deploy.ym
 - When Vercel builds your project natively via its GitHub integration (as seen when pushing to `main`), Vercel reads environment variables **only** from **Vercel Dashboard -> Settings -> Environment Variables**.
 - To fix missing variables in Vercel deployments, copy your `.env` variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, etc.) directly into **Vercel Dashboard -> Settings -> Environment Variables**.
 
+### Supabase OAuth Error: `{"error":"requested path is invalid"}`
+- **Cause**: In Supabase Dashboard -> **Authentication -> URL Configuration**, the **Site URL** or **Redirect URL** was saved without `https://` (e.g., `chat.makwanatechsolution.in`). Without `https://`, Supabase treats it as a relative path under `supabase.co`.
+- **Solution**: Always include the full scheme `https://` in Supabase URL Configuration:
+  - **Site URL**: `https://chat.makwanatechsolution.in`
+  - **Redirect URLs**: `https://chat.makwanatechsolution.in/**`, `http://localhost:*`
+
+
