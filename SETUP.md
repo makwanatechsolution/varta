@@ -199,3 +199,16 @@ Pushing to the `main` branch automatically triggers `.github/workflows/deploy.ym
 
 ### WebRTC audio/video call fails on mobile networks
 - Ensure `VITE_TURN_SERVER_URL` and `VITE_TURN_CREDENTIAL` are configured correctly with Metered.ca.
+
+### GitHub Actions Error: `Project not found ({"VERCEL_PROJECT_ID":"...", "VERCEL_ORG_ID":"..."})`
+- **Cause**: GitHub Repository Secrets `VERCEL_PROJECT_ID` or `VERCEL_ORG_ID` are incorrect, missing `prj_` / `team_` prefixes, or mismatched.
+- **Solution**:
+  1. Open your project in **Vercel Dashboard -> Settings -> General** and copy the **Project ID** (`prj_...`). Update `VERCEL_PROJECT_ID` in GitHub Secrets.
+  2. Open **Vercel Account/Team Settings -> General** and copy the **Team ID / Account ID** (`team_...` or `usr_...`). Update `VERCEL_ORG_ID` in GitHub Secrets.
+  3. Alternatively, run `npx vercel link` in your local terminal to generate `.vercel/project.json` which contains the exact `orgId` and `projectId`.
+
+### Why environment variables in GitHub Secrets don't show up in Vercel Dashboard
+- **GitHub Secrets** are strictly private variables for GitHub Actions runners and are **never** automatically synced to Vercel or Supabase.
+- When Vercel builds your project natively via its GitHub integration (as seen when pushing to `main`), Vercel reads environment variables **only** from **Vercel Dashboard -> Settings -> Environment Variables**.
+- To fix missing variables in Vercel deployments, copy your `.env` variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, etc.) directly into **Vercel Dashboard -> Settings -> Environment Variables**.
+
