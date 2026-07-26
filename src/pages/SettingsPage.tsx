@@ -1348,14 +1348,12 @@ function DevicesSettingsPane() {
 
     let stream: MediaStream | null = null;
     try {
-      // 1. Try with preferred facingMode
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: facingMode } },
         audio: false,
       });
     } catch (err1) {
       try {
-        // 2. Fallback to simple true constraint
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       } catch (err2: any) {
         console.error("Camera access failed:", err2);
@@ -1382,45 +1380,88 @@ function DevicesSettingsPane() {
         console.warn("Video play error:", playErr);
       }
     }
+  }, [facingMode, stopCamera, videoElement]);
 
-    // QR scan animation loop
-    const scanLoop = async () => {
-      if (videoElement && videoElement.readyState >= 2 && "BarcodeDetector" in window) {
+  const broadcastPairing = async (targetCode: string) => {
+    let cleanCode = targetCode.trim();
+    if (cleanCode.includes("pair=")) {
+      cleanCode = cleanCode.split("pair=")[1]?.split("&")[0] || cleanCode;
+    }
+    cleanCode = cleanCode.toUpperCase();
+    if (!cleanCode) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const channel = supabase.channel(`varta-qr-login-${cleanCode}`);
+        channel.subscribe(async (status) => {
+          if (status === "SUBSCRIBED") {
+            await channel.send({
+              type: "broadcast",
+              event: "auth-session",
+              payload: {
+                session: {
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                },
+              },
+            });
+            setTimeout(() => {
+              supabase.removeChannel(channel);
+            }, 1200);
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Pairing broadcast error:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (!cameraActive || !videoElement) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+
+      if (videoElement.readyState >= 2 && "BarcodeDetector" in window) {
         try {
           const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
           const barcodes = await detector.detect(videoElement);
           if (barcodes.length > 0 && barcodes[0].rawValue) {
+            const raw = barcodes[0].rawValue;
+            await broadcastPairing(raw);
             setPairingSuccess(true);
             stopCamera();
-            setTimeout(() => {
+            window.setTimeout(() => {
               setPairingSuccess(false);
               setShowLinkModal(false);
             }, 2000);
             return;
           }
         } catch (e) {
-          // ignore detector frame errors
+          console.debug("QR detector frame error", e);
         }
       }
-      animIdRef.current = requestAnimationFrame(scanLoop);
+
+      animIdRef.current = window.requestAnimationFrame(tick);
     };
 
-    animIdRef.current = requestAnimationFrame(scanLoop);
-  }, [facingMode, videoElement, stopCamera]);
+    tick();
 
-  // Trigger start when modal and video element are both ready
-  useEffect(() => {
-    if (showLinkModal && videoElement && !pairingSuccess) {
-      startCamera();
-    }
     return () => {
-      stopCamera();
+      cancelled = true;
+      if (animIdRef.current) {
+        window.cancelAnimationFrame(animIdRef.current);
+        animIdRef.current = null;
+      }
     };
-  }, [showLinkModal, videoElement, facingMode, pairingSuccess, startCamera, stopCamera]);
+  }, [cameraActive, stopCamera, videoElement, facingMode]);
 
   const handlePairDevice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pairingCode.trim()) return;
+    broadcastPairing(pairingCode);
     setPairingSuccess(true);
     stopCamera();
     setTimeout(() => {

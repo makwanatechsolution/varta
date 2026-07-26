@@ -590,10 +590,11 @@ export async function createGroupConversation(title: string, memberIds: string[]
 
 export async function searchUsers(query: string) {
   if (!query.trim()) return [];
+  const normalized = query.trim();
   const { data } = await supabase
     .from("profiles")
     .select("id, display_name, username, avatar_url, presence")
-    .or(`display_name.ilike.%${query}%,username.ilike.%${query}%`)
+    .or(`display_name.ilike.%${normalized}%,username.ilike.%${normalized}%,id.eq.${normalized}`)
     .limit(20);
   return data ?? [];
 }

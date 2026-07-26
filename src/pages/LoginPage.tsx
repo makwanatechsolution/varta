@@ -10,12 +10,46 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
   const [pairingToken, setPairingToken] = useState("");
+  const [qrStatusText, setQrStatusText] = useState("Waiting for QR scan...");
 
   useEffect(() => {
     if (activeTab === "qr" && !pairingToken) {
       setPairingToken(Math.random().toString(36).substring(2, 8).toUpperCase());
     }
   }, [activeTab, pairingToken]);
+
+  // Realtime Broadcast channel listener for QR Code Login
+  useEffect(() => {
+    if (activeTab !== "qr" || !pairingToken) return;
+
+    setQrStatusText("Waiting for QR scan...");
+    const channelName = `varta-qr-login-${pairingToken}`;
+    const channel = supabase.channel(channelName);
+
+    channel
+      .on("broadcast", { event: "auth-session" }, async ({ payload }) => {
+        if (payload?.session?.access_token && payload?.session?.refresh_token) {
+          setQrStatusText("Device Authenticated! Signing in...");
+          setLoading(true);
+          const { data, error: err } = await supabase.auth.setSession({
+            access_token: payload.session.access_token,
+            refresh_token: payload.session.refresh_token,
+          });
+          setLoading(false);
+          if (!err && data.session?.user) {
+            await supabase.auth.getUser();
+            navigate("/", { replace: true });
+          } else {
+            setQrStatusText("Pairing failed. Please refresh QR code and try again.");
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeTab, pairingToken, navigate]);
 
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -320,12 +354,12 @@ export function LoginPage() {
           {/* Tab 3: QR Code Scan Login — Real Scannable SVG QR Code */}
           {activeTab === "qr" && (
             <div className="flex flex-col items-center justify-center p-6 bg-[#111b21] rounded-3xl border border-zinc-800 text-center space-y-4">
-              <div className="p-4 bg-white rounded-2xl shadow-xl flex items-center justify-center">
+              <div className="p-4 bg-white rounded-2xl shadow-xl flex items-center justify-center relative">
                 <div
                   className="w-48 h-48 flex items-center justify-center"
                   dangerouslySetInnerHTML={{
                     __html: generateQRCodeSVG(
-                      `${window.location.origin}/join?pair=${pairingToken || "varta_pair_token"}`,
+                      `${window.location.origin}/join?pair=${pairingToken}`,
                       { size: 220, fgColor: "#0b141a" }
                     ),
                   }}
@@ -336,10 +370,21 @@ export function LoginPage() {
                 <p className="text-xs text-zinc-400 mt-1">Open Varta App on your phone → Settings → Linked Devices → Scan QR</p>
                 <div className="mt-3 p-2 bg-[#202c33] rounded-xl border border-zinc-700/60 inline-block">
                   <p className="text-[11px] text-zinc-400 uppercase font-mono tracking-widest">
-                    Pairing Code: <span className="text-[#1E88C7] font-bold text-xs">{pairingToken ? pairingToken.slice(0, 6).toUpperCase() : "849201"}</span>
+                    Pairing Code: <span className="text-[#1E88C7] font-bold text-xs">{pairingToken}</span>
                   </p>
                 </div>
+                <p className="text-xs font-semibold text-[#1E88C7] mt-3 animate-pulse">
+                  {qrStatusText}
+                </p>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setPairingToken(Math.random().toString(36).substring(2, 8).toUpperCase())}
+                className="text-[11px] font-semibold text-zinc-400 hover:text-white underline pt-1"
+              >
+                Refresh QR Code
+              </button>
             </div>
           )}
 

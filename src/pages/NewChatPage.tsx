@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Search, Users, Plus, X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { searchUsers, createDirectConversation, createGroupConversation } from "../hooks/useChat";
@@ -9,6 +9,8 @@ import type { Profile } from "../types/database";
 export function NewChatPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const connectTarget = searchParams.get("connect")?.trim() ?? "";
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,12 +24,28 @@ export function NewChatPage() {
       if (!query.trim()) { setResults([]); return; }
       setLoading(true);
       const found = await searchUsers(query);
-      // exclude self
       setResults((found as Profile[]).filter((p) => p.id !== user?.id));
       setLoading(false);
     }, 300);
     return () => clearTimeout(tid);
   }, [query, user]);
+
+  useEffect(() => {
+    if (!connectTarget || !user) return;
+
+    const resolveConnectTarget = async () => {
+      setQuery(connectTarget);
+      const found = (await searchUsers(connectTarget)) as Profile[];
+      const match = found.find((profile) => profile.id !== user.id);
+      if (match) {
+        await handleSelectUser(match);
+      } else {
+        setResults(found.filter((profile) => profile.id !== user.id));
+      }
+    };
+
+    void resolveConnectTarget();
+  }, [connectTarget, user]);
 
   const handleSelectUser = async (profile: Profile) => {
     if (mode === "dm") {
