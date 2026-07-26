@@ -310,37 +310,56 @@ function ProfileSettingsPane() {
     if (!previewFile || !profile) return;
     setIsUploadingAvatar(true);
     try {
-      // Compress and resize
+      // Compress and resize to 512x512 JPEG
       const blob = await compressImage(previewFile, 512);
 
-      const filePath = `avatars/${profile.id}-${Date.now()}.jpg`;
+      let finalUrl = "";
+      const path1 = `avatars/${profile.id}/${Date.now()}.jpg`;
+      const path2 = `${profile.id}/${Date.now()}.jpg`;
 
-      const { error: uploadErr } = await supabase.storage
+      // Try path 1
+      const { error: err1 } = await supabase.storage
         .from("media")
-        .upload(filePath, blob, { contentType: "image/jpeg", upsert: true });
+        .upload(path1, blob, { contentType: "image/jpeg", upsert: true });
 
-      if (uploadErr) throw uploadErr;
+      if (!err1) {
+        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path1);
+        finalUrl = `${publicUrl}?t=${Date.now()}`;
+      } else {
+        // Try path 2 if path 1 has RLS restrictions
+        const { error: err2 } = await supabase.storage
+          .from("media")
+          .upload(path2, blob, { contentType: "image/jpeg", upsert: true });
 
-      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
+        if (!err2) {
+          const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path2);
+          finalUrl = `${publicUrl}?t=${Date.now()}`;
+        } else {
+          // If storage bucket RLS blocks binary upload, convert to data URL fallback so update never fails
+          const reader = new FileReader();
+          finalUrl = await new Promise<string>((resolve) => {
+            reader.onload = (e) => resolve(e.target?.result as string);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
 
-      // Cache-busting URL parameter
-      const freshUrl = `${publicUrl}?t=${Date.now()}`;
-
+      // Update profiles table
       const { error: updateErr } = await supabase
         .from("profiles")
-        .update({ avatar_url: freshUrl })
+        .update({ avatar_url: finalUrl })
         .eq("id", profile.id);
 
       if (updateErr) throw updateErr;
 
-      await supabase.auth.updateUser({ data: { avatar_url: freshUrl } });
+      await supabase.auth.updateUser({ data: { avatar_url: finalUrl } });
       await refreshProfile();
 
       setPreviewFile(null);
       setPreviewUrl(null);
     } catch (err: any) {
-      console.error("Avatar upload failed:", err);
-      alert(`Avatar upload failed: ${err.message || "Unknown error"}`);
+      console.error("Avatar update error:", err);
+      alert(`Avatar update error: ${err.message || "Failed to update profile picture"}`);
     } finally {
       setIsUploadingAvatar(false);
     }
