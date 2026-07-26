@@ -70,17 +70,27 @@ export function StatusPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0b141a] text-white">
-      <header className="flex items-center gap-4 bg-[#111b21] px-4 py-3">
-        <Link to="/" className="text-zinc-400 hover:text-white">
+    <div
+      className="flex flex-col relative overflow-hidden"
+      style={{ height: "100dvh", backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
+    >
+      <header
+        className="flex items-center gap-4 px-4 py-3 border-b shadow-sm"
+        style={{
+          backgroundColor: "var(--bg-surface)",
+          borderColor: "var(--border-subtle)",
+          paddingTop: "max(12px, env(safe-area-inset-top, 12px))",
+        }}
+      >
+        <Link to="/" className="md:hidden transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }}>
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="flex-1 font-semibold text-lg">Status</h1>
+        <h1 className="flex-1 font-semibold text-lg" style={{ color: "var(--text-main)" }}>Status</h1>
       </header>
 
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-28">
         {/* My status */}
-        <section className="border-b border-zinc-800">
+        <section className="border-b" style={{ borderColor: "var(--border-subtle)" }}>
           <div className="flex items-center gap-3 px-4 py-3">
             <Avatar
               name={user?.email ?? "You"}
@@ -89,8 +99,8 @@ export function StatusPage() {
               onClick={() => myStories.length > 0 && handleViewMyStory(myStories[0]!)}
             />
             <div className="flex-1">
-              <p className="font-medium">My Status</p>
-              <p className="text-xs text-zinc-500">
+              <p className="font-medium" style={{ color: "var(--text-main)" }}>My Status</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {myStories.length > 0
                   ? `${myStories.length} update${myStories.length > 1 ? "s" : ""}`
                   : "Tap to add status update"}
@@ -100,7 +110,8 @@ export function StatusPage() {
               <button
                 type="button"
                 onClick={() => handleViewMyStory(myStories[0]!)}
-                className="rounded-full p-2 hover:bg-zinc-800 text-zinc-400"
+                className="rounded-full p-2 hover:bg-surface"
+                style={{ color: "var(--text-muted)" }}
               >
                 <Eye className="h-5 w-5" />
               </button>
@@ -111,7 +122,7 @@ export function StatusPage() {
         {/* Recent updates */}
         {Object.keys(grouped).length > 0 && (
           <section>
-            <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
               Recent updates
             </p>
             {Object.entries(grouped).map(([userId, userStories]) => {
@@ -122,17 +133,19 @@ export function StatusPage() {
                   key={userId}
                   type="button"
                   onClick={() => setViewerStories(userStories)}
-                  className="flex w-full items-center gap-3 px-4 py-3 hover:bg-[#111b21] transition-colors"
+                  className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface transition-colors border-b"
+                  style={{ borderColor: "var(--border-subtle)" }}
                 >
                   <Avatar
                     src={latest?.profile?.avatar_url}
                     name={latest?.profile?.display_name ?? "?"}
+                    presence={latest?.profile?.presence}
                     size="lg"
                     storyUnseen={unseen}
                   />
                   <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate font-medium">{latest?.profile?.display_name}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="truncate font-medium" style={{ color: "var(--text-main)" }}>{latest?.profile?.display_name}</p>
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                       {userStories.length} update{userStories.length > 1 ? "s" : ""}
                       {unseen ? " · New" : ""}
                     </p>
@@ -144,9 +157,9 @@ export function StatusPage() {
         )}
 
         {Object.keys(grouped).length === 0 && myStories.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-600">
+          <div className="flex flex-col items-center justify-center py-20 text-center" style={{ color: "var(--text-muted)" }}>
             <Camera className="mb-4 h-12 w-12 opacity-40" />
-            <p className="text-sm">No status updates</p>
+            <p className="text-sm font-medium">No status updates</p>
             <p className="mt-1 text-xs opacity-70">Post your first status below</p>
           </div>
         )}
@@ -189,7 +202,7 @@ export function StatusPage() {
             ))}
           </div>
 
-          <div className="p-4">
+          <div className="p-4" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom, 16px))" }}>
             <button
               type="button"
               onClick={handleTextPost}
@@ -206,15 +219,16 @@ export function StatusPage() {
       {showViewerList && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm" onClick={() => setShowViewerList(false)}>
           <div
-            className="w-full max-h-[60vh] overflow-y-auto rounded-t-2xl bg-[#111b21] p-4"
+            className="w-full max-h-[60vh] overflow-y-auto rounded-t-2xl p-4 border-t"
+            style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold text-white">Viewed by {viewerList.length}</h3>
-              <button type="button" onClick={() => setShowViewerList(false)} className="text-zinc-500">✕</button>
+              <h3 className="font-semibold" style={{ color: "var(--text-main)" }}>Viewed by {viewerList.length}</h3>
+              <button type="button" onClick={() => setShowViewerList(false)} style={{ color: "var(--text-muted)" }}>✕</button>
             </div>
             {viewerList.length === 0 && (
-              <p className="py-6 text-center text-sm text-zinc-500">No views yet</p>
+              <p className="py-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>No views yet</p>
             )}
             {viewerList.map((v, i) => (
               <div key={i} className="flex items-center gap-3 py-2">
@@ -224,7 +238,7 @@ export function StatusPage() {
                   size="sm"
                 />
                 <div className="flex-1">
-                  <p className="text-sm font-medium">{v.viewer?.display_name}</p>
+                  <p className="text-sm font-medium" style={{ color: "var(--text-main)" }}>{v.viewer?.display_name}</p>
                 </div>
                 {v.reaction_emoji && (
                   <span className="text-xl">{v.reaction_emoji}</span>
@@ -244,14 +258,18 @@ export function StatusPage() {
         />
       )}
 
-      {/* FABs */}
-      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3">
+      {/* FABs — positioned above mobile bottom bar */}
+      <div
+        className="fixed bottom-20 md:bottom-6 right-6 flex flex-col items-end gap-3 z-20"
+        style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
         <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handlePhotoUpload} />
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={posting}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-700 text-white shadow-lg hover:bg-zinc-600 transition-colors"
+          className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-transform hover:scale-105"
+          style={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid var(--border-subtle)" }}
           title="Photo status"
         >
           <Camera className="h-5 w-5" />
@@ -259,7 +277,8 @@ export function StatusPage() {
         <button
           type="button"
           onClick={() => setShowTextForm(true)}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1E88C7] text-white shadow-xl hover:bg-[#1971A5] transition-colors"
+          className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105"
+          style={{ backgroundColor: "var(--color-primary)" }}
           title="Text status"
         >
           <Plus className="h-6 w-6" />

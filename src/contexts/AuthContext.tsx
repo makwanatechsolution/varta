@@ -59,8 +59,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       else setProfile(null);
     });
 
-    return () => sub.subscription.unsubscribe();
-  }, []);
+    let profileChannel: ReturnType<typeof supabase.channel> | null = null;
+    if (session?.user?.id) {
+      profileChannel = supabase
+        .channel(`user_profile:${session.user.id}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${session.user.id}` },
+          (payload) => {
+            if (payload.new) setProfile(payload.new as Profile);
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      sub.subscription.unsubscribe();
+      if (profileChannel) supabase.removeChannel(profileChannel);
+    };
+  }, [session?.user?.id]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

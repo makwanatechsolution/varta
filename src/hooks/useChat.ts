@@ -114,6 +114,7 @@ export function useConversations() {
         });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, silentReload)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, silentReload)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

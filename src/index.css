@@ -13,7 +13,6 @@
   --color-success: #22C55E;
   --color-warning: #F59E0B;
   --color-error: #EF4444;
-
   --radius-xl: 24px;
 }
 
@@ -35,6 +34,13 @@
   --color-accent:   #1E88C7;
   --nav-rail-bg:    #0b141a;
   --input-bg:       #1b2326;
+  --bottom-nav-bg:  #111b21;
+
+  /* Safe area fallbacks */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
 }
 
 /* ─── LIGHT MODE ─────────────────────────────────────────────────────────── */
@@ -53,6 +59,7 @@
   --scrollbar-thumb: #c1c9d0;
   --nav-rail-bg:    #edeff1;
   --input-bg:       #f0f2f5;
+  --bottom-nav-bg:  #ffffff;
 }
 
 /* ─── VARTA DARK ─────────────────────────────────────────────────────────── */
@@ -71,6 +78,7 @@
   --scrollbar-thumb: #374045;
   --nav-rail-bg:    #0b141a;
   --input-bg:       #1b2326;
+  --bottom-nav-bg:  #111b21;
 }
 
 /* ─── AMOLED ─────────────────────────────────────────────────────────────── */
@@ -89,6 +97,7 @@
   --scrollbar-thumb: #1a1a1a;
   --nav-rail-bg:    #000000;
   --input-bg:       #0a0a0a;
+  --bottom-nav-bg:  #050505;
 }
 
 /* ─── MIDNIGHT NAVY ──────────────────────────────────────────────────────── */
@@ -109,100 +118,92 @@
   --color-accent:   #38bdf8;
   --nav-rail-bg:    #0f172a;
   --input-bg:       #1e293b;
+  --bottom-nav-bg:  #1e293b;
 }
 
 /* ─── Base Reset ─────────────────────────────────────────────────────────── */
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 
-html, body, #root {
+html {
+  /* dvh = dynamic viewport height: shrinks when keyboard opens on iOS/Android */
   height: 100%;
-  margin: 0;
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  transition: background-color 0.25s ease, color 0.25s ease;
+  height: 100dvh;
 }
 
 body {
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  background-color: var(--bg-main);
+  color: var(--text-main);
   font-family: "Inter", "SF Pro Display", "Manrope", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Prevent iOS text size adjustment on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+#root {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
   background-color: var(--bg-main);
   color: var(--text-main);
 }
 
-/* ─── Token Utility Classes ──────────────────────────────────────────────── */
-/* These are THEME-AWARE classes used across all components instead of        */
-/* hardcoded hex colours. They automatically flip when the theme class        */
-/* is toggled on <html>.                                                       */
+/* ─── Safe Area Utility Classes ──────────────────────────────────────────── */
+/* Use these on bottom-fixed elements (FABs, composers, bottom nav) */
+.pt-safe  { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pl-safe  { padding-left:   env(safe-area-inset-left,   0px); }
+.pr-safe  { padding-right:  env(safe-area-inset-right,  0px); }
 
-.bg-app-main    { background-color: var(--bg-main)    !important; }
-.bg-app-sidebar { background-color: var(--bg-sidebar) !important; }
-.bg-app-surface { background-color: var(--bg-surface) !important; }
-.bg-app-card    { background-color: var(--bg-card)    !important; }
-.bg-app-input   { background-color: var(--input-bg)   !important; }
+.mt-safe  { margin-top:    env(safe-area-inset-top,    0px); }
+.mb-safe  { margin-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Extra bottom padding = element height + safe area (for floating elements) */
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ─── Theme Token Utility Classes ────────────────────────────────────────── */
+.bg-app-main    { background-color: var(--bg-main)     !important; }
+.bg-app-sidebar { background-color: var(--bg-sidebar)  !important; }
+.bg-app-surface { background-color: var(--bg-surface)  !important; }
+.bg-app-card    { background-color: var(--bg-card)     !important; }
+.bg-app-input   { background-color: var(--input-bg)    !important; }
 .bg-nav-rail    { background-color: var(--nav-rail-bg) !important; }
+.bg-bottom-nav  { background-color: var(--bottom-nav-bg) !important; }
 
 .text-app-main  { color: var(--text-main)  !important; }
 .text-app-muted { color: var(--text-muted) !important; }
-
 .border-app     { border-color: var(--border-subtle) !important; }
 
-.msg-bubble-in {
-  background-color: var(--msg-bubble-in) !important;
-  color: var(--msg-text-in) !important;
+/* ─── Theme transition (smooth color switch) ─────────────────────────────── */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
 }
-.msg-bubble-out {
-  background-color: var(--msg-bubble-out) !important;
-  color: var(--msg-text-out) !important;
+/* Exclude from transition to avoid jank */
+img, video, svg, canvas, [data-no-transition],
+.animate-spin, .animate-pulse, .animate-bounce {
+  transition: none !important;
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb, #374045);
   border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover { opacity: 0.8; }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ─── Transition for theme switches ─────────────────────────────────────── */
-*,
-*::before,
-*::after {
-  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
-  transition-duration: 200ms;
-  transition-timing-function: ease;
-}
-
-/* Exclude expensive transitions */
-img, video, svg, canvas, [data-no-transition] {
-  transition: none !important;
-}
-
-/* ─── Nav-rail active indicator ─────────────────────────────────────────── */
-.nav-item-active {
-  background-color: var(--color-primary) !important;
-  color: #ffffff !important;
-}
-.nav-item {
-  color: var(--text-muted);
-}
-.nav-item:hover {
-  background-color: var(--bg-surface);
-  color: var(--text-main);
-}
-
-/* ─── Conversation list item ─────────────────────────────────────────────── */
-.conv-item { background-color: transparent; }
-.conv-item:hover { background-color: var(--bg-surface); }
-.conv-item-active {
-  background-color: var(--color-primary) !important;
-  color: #fff !important;
-}
-
-/* ─── Message composer ───────────────────────────────────────────────────── */
+/* ─── Composer Input ─────────────────────────────────────────────────────── */
 .composer-input {
   background-color: var(--input-bg);
   color: var(--text-main);
@@ -212,10 +213,26 @@ img, video, svg, canvas, [data-no-transition] {
 .composer-input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
-/* ─── Emoji Picker ───────────────────────────────────────────────────────── */
+/* ─── Mobile: prevent rubber-band scroll on body ────────────────────────── */
+body { overscroll-behavior: none; }
+
+/* ─── iOS tap highlight removal ──────────────────────────────────────────── */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* ─── Touch target minimum size (WCAG 2.5.5) ────────────────────────────── */
+button, a, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Override for inline/text elements */
+a.inline-link { min-height: unset; min-width: unset; display: inline; }
+
+/* ─── Emoji Picker (theme-aware) ─────────────────────────────────────────── */
 .emoji-picker {
   width: 320px;
   max-height: 380px;
@@ -267,7 +284,7 @@ img, video, svg, canvas, [data-no-transition] {
 }
 .emoji-picker__emoji-btn:hover { background: var(--bg-surface); }
 
-/* ─── Light-mode specific overrides for 3rd party pickers ─────────────────── */
+/* Light-mode 3rd party emoji picker overrides */
 .light aside.epr-main,
 .light .epr-main {
   background-color: var(--bg-card) !important;
@@ -277,4 +294,8 @@ img, video, svg, canvas, [data-no-transition] {
   background-color: var(--input-bg) !important;
   color: var(--text-main) !important;
 }
-.light .epr-category-nav { border-bottom-color: var(--border-subtle) !important; }
+
+/* ─── Settings pane: mobile slide-in ────────────────────────────────────── */
+.settings-slide-enter  { transform: translateX(100%); }
+.settings-slide-active { transform: translateX(0); transition: transform 280ms cubic-bezier(0.4,0,0.2,1); }
+.settings-slide-exit   { transform: translateX(100%); transition: transform 280ms cubic-bezier(0.4,0,0.2,1); }

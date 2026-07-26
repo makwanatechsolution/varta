@@ -215,13 +215,17 @@ export function ChatRoomPage() {
 
   return (
     <div
-      className="flex h-screen flex-col relative z-0 overflow-hidden"
-      style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
+      className="flex flex-col relative z-0 overflow-hidden"
+      style={{ height: "100dvh", backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
     >
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header
         className="flex items-center gap-3 px-4 py-3 shadow-sm border-b z-10 sticky top-0 backdrop-blur-xl"
-        style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+        style={{
+          backgroundColor: "var(--bg-surface)",
+          borderColor: "var(--border-subtle)",
+          paddingTop: "max(12px, env(safe-area-inset-top, 12px))",
+        }}
       >
         <Link to="/" className="md:hidden transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }}>
           <ArrowLeft className="h-5 w-5" />
@@ -316,7 +320,11 @@ export function ChatRoomPage() {
       {/* ── Composer ────────────────────────────────────────────────────── */}
       <div
         className="relative border-t px-2 py-2 backdrop-blur-md"
-        style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+        style={{
+          backgroundColor: "var(--bg-surface)",
+          borderColor: "var(--border-subtle)",
+          paddingBottom: "max(8px, env(safe-area-inset-bottom, 8px))",
+        }}
       >
         <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGif} />
 

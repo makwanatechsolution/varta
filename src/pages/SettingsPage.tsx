@@ -23,11 +23,16 @@ import {
   Camera,
   Loader2,
   Volume2,
-  Play
+  ArrowLeft,
+  RefreshCw,
+  Trash2,
+  UploadCloud,
+  X
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCallingContext } from "../contexts/CallingContext";
 import { useSettings, PRESET_ACCENTS } from "../contexts/SettingsContext";
+import { usePresence } from "../hooks/usePresence";
 import { supabase } from "../lib/supabase";
 import { Avatar } from "../components/ui/Avatar";
 import { QRCodeModal } from "../components/ui/QRCodeModal";
@@ -72,34 +77,59 @@ const TABS: { id: SettingsTab; label: string; icon: any }[] = [
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [mobileShowContent, setMobileShowContent] = useState(false);
   const { profile } = useAuth();
 
+  const handleSelectTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    setMobileShowContent(true);
+  };
+
   return (
-    <div className="flex h-full w-full bg-[#0b141a] overflow-hidden font-sans text-white">
+    <div
+      className="flex h-full w-full overflow-hidden font-sans relative"
+      style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
+    >
       {/* ─── Left Sidebar Navigation ──────────────────────────────────────── */}
-      <div className="w-[320px] flex-shrink-0 border-r border-zinc-800 bg-[#111b21] flex flex-col h-full z-10 shadow-xl">
-        <header className="px-6 py-5 border-b border-zinc-800 bg-[#111b21]">
+      <div
+        className={clsx(
+          "w-full md:w-[320px] flex-shrink-0 border-r flex flex-col h-full z-10 shadow-xl transition-all",
+          mobileShowContent ? "hidden md:flex" : "flex w-full"
+        )}
+        style={{ backgroundColor: "var(--bg-sidebar)", borderColor: "var(--border-subtle)" }}
+      >
+        <header
+          className="px-6 py-5 border-b"
+          style={{ backgroundColor: "var(--bg-sidebar)", borderColor: "var(--border-subtle)" }}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-[#1E88C7]/15 text-[#1E88C7] border border-[#1E88C7]/30">
+            <div
+              className="p-2.5 rounded-2xl border"
+              style={{ backgroundColor: "rgba(30,136,199,0.15)", color: "var(--color-primary)", borderColor: "rgba(30,136,199,0.3)" }}
+            >
               <SettingsIcon className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">Settings</h1>
-              <p className="text-xs text-zinc-400">Varta Preferences & System Controls</p>
+              <h1 className="text-xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Settings</h1>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Varta Preferences & System Controls</p>
             </div>
           </div>
         </header>
 
         {/* Profile Card Header Summary */}
-        <div className="px-4 py-3 border-b border-zinc-800/80">
+        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border-subtle)" }}>
           <div
-            onClick={() => setActiveTab("profile")}
+            onClick={() => handleSelectTab("profile")}
             className={clsx(
               "flex items-center gap-3.5 p-3 rounded-2xl cursor-pointer transition-all border",
               activeTab === "profile"
-                ? "bg-[#1E88C7] text-white shadow-lg shadow-[#1E88C7]/20 border-[#1E88C7]"
-                : "bg-[#1b2326]/60 hover:bg-[#1b2326] border-zinc-800"
+                ? "bg-primary text-white shadow-lg border-primary"
+                : "hover:bg-surface border-subtle"
             )}
+            style={activeTab === "profile"
+              ? { backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary)", color: "#fff" }
+              : { backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }
+            }
           >
             <Avatar
               src={profile?.avatar_url}
@@ -108,26 +138,14 @@ export function SettingsPage() {
               presence={profile?.presence}
             />
             <div className="flex-1 min-w-0">
-              <h2
-                className={clsx(
-                  "font-semibold truncate text-[14px]",
-                  activeTab === "profile" ? "text-white" : "text-white"
-                )}
-              >
+              <h2 className="font-semibold truncate text-[14px]" style={{ color: activeTab === "profile" ? "#fff" : "var(--text-main)" }}>
                 {profile?.display_name || "Varta User"}
               </h2>
-              <p
-                className={clsx(
-                  "text-[12px] truncate",
-                  activeTab === "profile" ? "text-white/80" : "text-zinc-400"
-                )}
-              >
+              <p className="text-[12px] truncate" style={{ color: activeTab === "profile" ? "rgba(255,255,255,0.8)" : "var(--text-muted)" }}>
                 {profile?.custom_status || `@${profile?.username || "user"}`}
               </p>
             </div>
-            <ChevronRight
-              className={clsx("w-5 h-5", activeTab === "profile" ? "text-white/80" : "text-zinc-400")}
-            />
+            <ChevronRight className="w-5 h-5" style={{ color: activeTab === "profile" ? "#fff" : "var(--text-muted)" }} />
           </div>
         </div>
 
@@ -140,25 +158,20 @@ export function SettingsPage() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={clsx(
-                  "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-left text-[13px] font-medium border",
-                  isActive
-                    ? "bg-[#1E88C7]/15 text-[#1E88C7] font-bold border-[#1E88C7]/30 shadow-md"
-                    : "text-zinc-300 hover:bg-[#1b2326] hover:text-white border-transparent"
-                )}
+                onClick={() => handleSelectTab(tab.id)}
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all text-left text-[14px] font-medium border"
+                style={isActive
+                  ? { backgroundColor: "rgba(30,136,199,0.15)", color: "var(--color-primary)", borderColor: "rgba(30,136,199,0.3)" }
+                  : { backgroundColor: "transparent", color: "var(--text-main)", borderColor: "transparent" }
+                }
               >
-                <Icon
-                  className={clsx(
-                    "w-4.5 h-4.5 shrink-0",
-                    isActive ? "text-[#1E88C7] stroke-[2.5px]" : "text-zinc-400 stroke-[2px]"
-                  )}
-                />
+                <Icon className="w-5 h-5 shrink-0" style={{ color: isActive ? "var(--color-primary)" : "var(--text-muted)" }} />
                 <span className="flex-1 truncate">{tab.label}</span>
                 {isActive && (
                   <motion.div
                     layoutId="settings-active-dot"
-                    className="w-2 h-2 rounded-full bg-[#1E88C7]"
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: "var(--color-primary)" }}
                   />
                 )}
               </button>
@@ -168,7 +181,31 @@ export function SettingsPage() {
       </div>
 
       {/* ─── Right Content Area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col h-full bg-[#0b141a] relative overflow-hidden">
+      <div
+        className={clsx(
+          "flex-1 flex flex-col h-full relative overflow-hidden",
+          mobileShowContent ? "flex w-full" : "hidden md:flex"
+        )}
+        style={{ backgroundColor: "var(--bg-main)" }}
+      >
+        {/* Mobile Header with Back Button */}
+        <div
+          className="md:hidden flex items-center gap-3 p-4 border-b z-20"
+          style={{ backgroundColor: "var(--bg-sidebar)", borderColor: "var(--border-subtle)" }}
+        >
+          <button
+            type="button"
+            onClick={() => setMobileShowContent(false)}
+            className="p-2 rounded-full hover:bg-surface"
+            style={{ color: "var(--text-main)" }}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h2 className="font-bold text-base capitalize" style={{ color: "var(--text-main)" }}>
+            {TABS.find((t) => t.id === activeTab)?.label ?? "Settings"}
+          </h2>
+        </div>
+
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -176,7 +213,7 @@ export function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="absolute inset-0 overflow-y-auto scrollbar-hide p-8 max-w-4xl"
+            className="absolute inset-0 overflow-y-auto scrollbar-hide p-4 md:p-8 max-w-4xl pt-16 md:pt-8"
           >
             {activeTab === "profile" && <ProfileSettingsPane />}
             {activeTab === "status" && <StatusSettingsPane />}
@@ -211,44 +248,131 @@ function ProfileSettingsPane() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profile) return;
+  // Avatar preview modal state
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("File size exceeds 5 MB limit.");
+  // Helper: Client-side canvas image resizing and compression
+  const compressImage = (file: File, maxDim = 512): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          // Square crop calculation
+          const minDim = Math.min(width, height);
+          const startX = (width - minDim) / 2;
+          const startY = (height - minDim) / 2;
+
+          canvas.width = maxDim;
+          canvas.height = maxDim;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return reject(new Error("Canvas context creation failed"));
+
+          // Draw cropped square
+          ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, maxDim, maxDim);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("Image compression failed"));
+            },
+            "image/jpeg",
+            0.85
+          );
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleSelectFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      alert("Please select a valid image file (JPG, PNG, WEBP).");
       return;
     }
+    setPreviewFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
 
+  const handleConfirmUpload = async () => {
+    if (!previewFile || !profile) return;
     setIsUploadingAvatar(true);
     try {
-      const fileExt = file.name.split(".").pop() || "png";
-      const filePath = `avatars/${profile.id}-${Date.now()}.${fileExt}`;
+      // Compress and resize
+      const blob = await compressImage(previewFile, 512);
+
+      const filePath = `avatars/${profile.id}-${Date.now()}.jpg`;
 
       const { error: uploadErr } = await supabase.storage
         .from("media")
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, blob, { contentType: "image/jpeg", upsert: true });
 
       if (uploadErr) throw uploadErr;
 
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
 
+      // Cache-busting URL parameter
+      const freshUrl = `${publicUrl}?t=${Date.now()}`;
+
       const { error: updateErr } = await supabase
         .from("profiles")
-        .update({ avatar_url: publicUrl })
+        .update({ avatar_url: freshUrl })
         .eq("id", profile.id);
 
       if (updateErr) throw updateErr;
 
-      await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+      await supabase.auth.updateUser({ data: { avatar_url: freshUrl } });
       await refreshProfile();
+
+      setPreviewFile(null);
+      setPreviewUrl(null);
     } catch (err: any) {
       console.error("Avatar upload failed:", err);
       alert(`Avatar upload failed: ${err.message || "Unknown error"}`);
     } finally {
       setIsUploadingAvatar(false);
     }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!profile || !confirm("Are you sure you want to remove your profile picture?")) return;
+    setIsUploadingAvatar(true);
+    try {
+      await supabase
+        .from("profiles")
+        .update({ avatar_url: null })
+        .eq("id", profile.id);
+
+      await supabase.auth.updateUser({ data: { avatar_url: null } });
+      await refreshProfile();
+    } catch (err: any) {
+      console.error("Failed to remove avatar:", err);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+  const handleDragLeave = () => setDragActive(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleSelectFile(file);
   };
 
   const handleSave = async () => {
@@ -271,8 +395,16 @@ function ProfileSettingsPane() {
         <p className="text-sm text-zinc-400">Manage your identity, avatar, bio, and personal QR card</p>
       </div>
 
-      {/* Avatar & Cover Section */}
-      <div className="relative rounded-3xl bg-[#111b21] border border-zinc-800 overflow-hidden shadow-xl">
+      {/* Avatar & Cover Section with Drag & Drop */}
+      <div
+        className={clsx(
+          "relative rounded-3xl bg-[#111b21] border transition-all overflow-hidden shadow-xl",
+          dragActive ? "border-[#1E88C7] ring-4 ring-[#1E88C7]/20" : "border-zinc-800"
+        )}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="h-28 bg-gradient-to-r from-[#1E88C7]/40 via-[#1E88C7]/20 to-[#0f4c75]/60 border-b border-zinc-800" />
 
         <div className="p-6 relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -285,6 +417,8 @@ function ProfileSettingsPane() {
                   size="lg"
                 />
               </div>
+
+              {/* Upload Overlay */}
               <label className="absolute inset-1 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-xs font-medium">
                 {isUploadingAvatar ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -297,7 +431,11 @@ function ProfileSettingsPane() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handleAvatarChange}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleSelectFile(f);
+                    e.target.value = "";
+                  }}
                   disabled={isUploadingAvatar}
                   className="hidden"
                 />
@@ -307,7 +445,32 @@ function ProfileSettingsPane() {
             <div className="mt-4 md:mt-0">
               <h3 className="text-2xl font-bold text-white">{profile?.display_name || "Varta User"}</h3>
               <p className="text-sm text-[#1E88C7] font-medium">@{profile?.username || "username"}</p>
+              <div className="flex gap-2 mt-2">
+                <label className="text-[11px] font-semibold text-[#1E88C7] hover:underline cursor-pointer flex items-center gap-1">
+                  <UploadCloud className="w-3.5 h-3.5" /> Change Photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleSelectFile(f);
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                {profile?.avatar_url && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    className="text-[11px] font-semibold text-red-400 hover:underline flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                  </button>
+                )}
+              </div>
             </div>
+          </div>
           </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-end shrink-0">
@@ -400,9 +563,53 @@ function ProfileSettingsPane() {
             disabled
             value={profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "2026"}
             className="w-full rounded-2xl bg-[#202c33]/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-500 outline-none cursor-not-allowed"
-          />
-        </div>
       </div>
+
+      {/* Avatar Preview & Crop Modal */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl relative text-center">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="font-bold text-white text-base">Preview Profile Avatar</h3>
+              <button
+                type="button"
+                onClick={() => { setPreviewFile(null); setPreviewUrl(null); }}
+                className="text-zinc-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex justify-center py-4">
+              <div className="relative w-36 h-36 rounded-full overflow-hidden ring-4 ring-[#1E88C7]/50 shadow-2xl">
+                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Image will be automatically cropped to a square and optimized for fast loading across all devices.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => { setPreviewFile(null); setPreviewUrl(null); }}
+                className="flex-1 py-2.5 rounded-2xl border border-zinc-700 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUpload}
+                disabled={isUploadingAvatar}
+                className="flex-1 py-2.5 rounded-2xl bg-[#1E88C7] hover:bg-[#1971A5] text-xs font-semibold text-white shadow-lg disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all"
+              >
+                {isUploadingAvatar ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Avatar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -410,6 +617,7 @@ function ProfileSettingsPane() {
 // ─── 2. Status & Presence Settings Pane ──────────────────────────────────────
 function StatusSettingsPane() {
   const { profile, refreshProfile } = useAuth();
+  const { setManualStatus } = usePresence();
   const [selectedPresence, setSelectedPresence] = useState<PresenceStatus>(
     profile?.presence ?? "online"
   );
@@ -432,6 +640,7 @@ function StatusSettingsPane() {
   const handleUpdate = async () => {
     if (!profile) return;
     setSaving(true);
+    await setManualStatus(selectedPresence);
     await supabase
       .from("profiles")
       .update({ presence: selectedPresence, custom_status: customText })
@@ -1026,8 +1235,14 @@ function DevicesSettingsPane() {
   const [pairingCode, setPairingCode] = useState("");
   const [pairingSuccess, setPairingSuccess] = useState(false);
   const [loggedOutOthers, setLoggedOutOthers] = useState(false);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
 
-  // Dynamic Real Device Detection from navigator.userAgent
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animIdRef = useRef<number | null>(null);
+
   const getDeviceDetails = () => {
     const ua = navigator.userAgent;
     let deviceName = "Varta Web Client";
@@ -1057,10 +1272,106 @@ function DevicesSettingsPane() {
 
   const currentDevice = getDeviceDetails();
 
+  // Stop camera helper
+  const stopCamera = useCallback(() => {
+    if (animIdRef.current) {
+      cancelAnimationFrame(animIdRef.current);
+      animIdRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  }, []);
+
+  // Start camera method with constraint fallback and DOM element assignment
+  const startCamera = useCallback(async () => {
+    stopCamera();
+    setCameraError(null);
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera access not supported on this browser context.");
+      return;
+    }
+
+    let stream: MediaStream | null = null;
+    try {
+      // 1. Try with preferred facingMode
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false,
+      });
+    } catch (err1) {
+      try {
+        // 2. Fallback to simple true constraint
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch (err2: any) {
+        console.error("Camera access failed:", err2);
+        setCameraError(
+          err2.name === "NotAllowedError" || err2.name === "PermissionDeniedError"
+            ? "Camera permission denied. Please allow camera access in your browser settings."
+            : err2.name === "NotFoundError" || err2.name === "DevicesNotFoundError"
+            ? "No camera device found."
+            : `Camera error: ${err2.message || "Failed to start camera"}`
+        );
+        return;
+      }
+    }
+
+    if (!stream) return;
+    streamRef.current = stream;
+    setCameraActive(true);
+
+    if (videoElement) {
+      videoElement.srcObject = stream;
+      try {
+        await videoElement.play();
+      } catch (playErr) {
+        console.warn("Video play error:", playErr);
+      }
+    }
+
+    // QR scan animation loop
+    const scanLoop = async () => {
+      if (videoElement && videoElement.readyState >= 2 && "BarcodeDetector" in window) {
+        try {
+          const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+          const barcodes = await detector.detect(videoElement);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            setPairingSuccess(true);
+            stopCamera();
+            setTimeout(() => {
+              setPairingSuccess(false);
+              setShowLinkModal(false);
+            }, 2000);
+            return;
+          }
+        } catch (e) {
+          // ignore detector frame errors
+        }
+      }
+      animIdRef.current = requestAnimationFrame(scanLoop);
+    };
+
+    animIdRef.current = requestAnimationFrame(scanLoop);
+  }, [facingMode, videoElement, stopCamera]);
+
+  // Trigger start when modal and video element are both ready
+  useEffect(() => {
+    if (showLinkModal && videoElement && !pairingSuccess) {
+      startCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [showLinkModal, videoElement, facingMode, pairingSuccess, startCamera, stopCamera]);
+
   const handlePairDevice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pairingCode.trim()) return;
     setPairingSuccess(true);
+    stopCamera();
     setTimeout(() => {
       setPairingSuccess(false);
       setShowLinkModal(false);
@@ -1137,7 +1448,10 @@ function DevicesSettingsPane() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowLinkModal(false)}
+                onClick={() => {
+                  stopCamera();
+                  setShowLinkModal(false);
+                }}
                 className="text-zinc-400 hover:text-white text-sm"
               >
                 ✕
@@ -1155,13 +1469,65 @@ function DevicesSettingsPane() {
               </div>
             ) : (
               <form onSubmit={handlePairDevice} className="space-y-4">
-                {/* Camera QR Scanner Simulator */}
-                <div className="h-44 bg-[#0b141a] rounded-2xl border-2 border-dashed border-zinc-700 flex flex-col items-center justify-center text-center p-4 relative overflow-hidden group">
-                  <div className="w-16 h-16 rounded-2xl bg-[#1E88C7]/15 text-[#1E88C7] flex items-center justify-center mb-2">
-                    <Camera className="w-8 h-8 animate-pulse" />
-                  </div>
-                  <p className="text-xs font-medium text-white">Camera Scanner Ready</p>
-                  <p className="text-[11px] text-zinc-500">Point your camera at the login QR code</p>
+                {/* Live Camera Scanner Box */}
+                <div className="relative h-60 bg-black rounded-2xl border-2 border-dashed border-[#1E88C7]/50 overflow-hidden flex flex-col items-center justify-center">
+                  <video
+                    ref={(node) => setVideoElement(node)}
+                    playsInline
+                    muted
+                    autoPlay
+                    className={clsx("w-full h-full object-cover", !cameraActive && "hidden")}
+                  />
+
+                  {!cameraActive && (
+                    <div className="p-6 text-center space-y-3 flex flex-col items-center justify-center h-full">
+                      <div className="w-14 h-14 rounded-2xl bg-[#1E88C7]/15 text-[#1E88C7] flex items-center justify-center">
+                        <Camera className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">
+                          {cameraError ? "Camera Notice" : "Camera Ready"}
+                        </p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          {cameraError || "Tap button below to start live QR camera scanner"}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        className="px-4 py-2 bg-[#1E88C7] hover:bg-[#1971A5] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-md transition-all"
+                      >
+                        <Camera className="w-4 h-4" /> Start Camera Scan
+                      </button>
+                    </div>
+                  )}
+
+                  {cameraActive && (
+                    <>
+                      {/* QR Scanner target frame overlay */}
+                      <div className="absolute inset-0 border-[32px] border-black/40 pointer-events-none flex items-center justify-center">
+                        <div className="w-36 h-36 border-2 border-[#1E88C7] rounded-2xl relative animate-pulse">
+                          <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white -mt-0.5 -ml-0.5" />
+                          <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white -mt-0.5 -mr-0.5" />
+                          <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white -mb-0.5 -ml-0.5" />
+                          <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-white -mb-0.5 -mr-0.5" />
+                        </div>
+                      </div>
+
+                      {/* Camera Flip / Stop controls */}
+                      <div className="absolute bottom-2 right-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))}
+                          className="p-2 rounded-xl bg-black/70 text-white hover:bg-black/90 transition-all text-xs flex items-center gap-1 border border-white/10"
+                          title="Switch Camera (Front/Rear)"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-medium">{facingMode === "environment" ? "Back" : "Front"}</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-2 pt-1">
