@@ -673,8 +673,8 @@ function StatusSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Status & Presence</h2>
-        <p className="text-sm text-zinc-400">Microsoft Teams style status and realtime availability</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Status & Presence</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Microsoft Teams style status and realtime availability</p>
       </div>
 
       {/* Presence Grid */}
@@ -686,17 +686,16 @@ function StatusSettingsPane() {
               key={opt.status}
               type="button"
               onClick={() => setSelectedPresence(opt.status)}
-              className={clsx(
-                "flex items-center gap-3 p-4 rounded-2xl border text-left transition-all",
-                isSelected
-                  ? "bg-[#1E88C7]/15 border-[#1E88C7] shadow-lg"
-                  : "bg-[#111b21] border-zinc-800 hover:bg-[#1b2326]"
-              )}
+              className="flex items-center gap-3 p-4 rounded-2xl border text-left transition-all shadow-sm"
+              style={isSelected
+                ? { backgroundColor: "rgba(30,136,199,0.15)", borderColor: "#1E88C7" }
+                : { backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }
+              }
             >
               <span className={clsx("w-3.5 h-3.5 rounded-full shrink-0", opt.color)} />
               <div>
-                <p className="font-semibold text-sm text-white">{opt.label}</p>
-                <p className="text-xs text-zinc-400">{opt.desc}</p>
+                <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>{opt.label}</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{opt.desc}</p>
               </div>
             </button>
           );
@@ -704,15 +703,16 @@ function StatusSettingsPane() {
       </div>
 
       {/* Custom Status Input */}
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-4 shadow-xl">
-        <h3 className="font-semibold text-base text-white">Custom Status Message</h3>
+      <div className="border rounded-3xl p-6 space-y-4 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <h3 className="font-semibold text-base" style={{ color: "var(--text-main)" }}>Custom Status Message</h3>
 
         <div className="flex gap-3">
           <input
             value={customText}
             onChange={(e) => setCustomText(e.target.value)}
             placeholder="💬 What's on your mind? (e.g. In deep work, back at 3 PM)"
-            className="flex-1 rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
+            className="flex-1 rounded-2xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1E88C7]/30"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           />
           <button
             type="button"
@@ -724,7 +724,7 @@ function StatusSettingsPane() {
           </button>
         </div>
 
-        <div className="flex items-center justify-between pt-2 text-xs text-zinc-400">
+        <div className="flex items-center justify-between pt-2 text-xs" style={{ color: "var(--text-muted)" }}>
           <span>Clear status after:</span>
           <div className="flex gap-2">
             {["Don't clear", "1 Hour", "4 Hours", "Today"].map((t) => (
@@ -732,12 +732,11 @@ function StatusSettingsPane() {
                 key={t}
                 type="button"
                 onClick={() => setExpiration(t)}
-                className={clsx(
-                  "px-3 py-1.5 rounded-xl border transition-all",
-                  expiration === t
-                    ? "bg-[#1E88C7]/20 border-[#1E88C7] text-[#1E88C7] font-semibold"
-                    : "bg-[#202c33] border-zinc-700 text-zinc-400"
-                )}
+                className="px-3 py-1.5 rounded-xl border transition-all"
+                style={expiration === t
+                  ? { backgroundColor: "rgba(30,136,199,0.2)", borderColor: "#1E88C7", color: "#1E88C7", fontWeight: 600 }
+                  : { backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)", color: "var(--text-muted)" }
+                }
               >
                 {t}
               </button>
