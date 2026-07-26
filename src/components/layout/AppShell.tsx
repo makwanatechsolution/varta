@@ -339,7 +339,7 @@ export function AppShell() {
               </div>
               <button
                 onClick={() => navigate("/new-chat")}
-                className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white"
+                className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-lg hover:opacity-90 transition-all"
                 style={{ backgroundColor: "var(--color-primary)" }}
               >
                 New conversation
@@ -350,11 +350,11 @@ export function AppShell() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, x: 16 }}
+              initial={{ opacity: 0, x: location.pathname.startsWith("/chat/") ? 40 : 0 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -16 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="flex-1 flex flex-col overflow-hidden"
+              exit={{ opacity: 0, x: location.pathname.startsWith("/chat/") ? 40 : 0 }}
+              transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+              className="flex-1 flex flex-col overflow-hidden will-change-transform"
             >
               <Outlet />
             </motion.div>
@@ -364,45 +364,47 @@ export function AppShell() {
 
       {/* ═══════════════════════════════════════════════════════════════════
           MOBILE BOTTOM NAVIGATION BAR (WhatsApp-style)
-          Shown only on "/" (chat list) and other non-chat pages on mobile
+          Hidden inside individual chat rooms (/chat/:id) so composer takes full bottom
       ═══════════════════════════════════════════════════════════════════ */}
-      <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 border-t z-30 flex"
-        style={{
-          backgroundColor: "var(--bottom-nav-bg)",
-          borderColor: "var(--border-subtle)",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        }}
-      >
-        {navItems.map(({ path, icon: Icon, label, badge }) => {
-          const active = path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
-          return (
-            <Link
-              key={path}
-              to={path}
-              className="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium"
-              style={{ color: active ? "var(--color-primary)" : "var(--text-muted)", minHeight: "unset", minWidth: "unset" }}
-            >
-              <div className="relative">
-                <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.5 : 2} />
-                {badge != null && (
-                  <span className="absolute -top-1 -right-1.5 h-3.5 w-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center">
-                    {badge > 9 ? "9+" : badge}
-                  </span>
+      {!location.pathname.startsWith("/chat/") && (
+        <nav
+          className="md:hidden fixed bottom-0 left-0 right-0 border-t z-30 flex"
+          style={{
+            backgroundColor: "var(--bottom-nav-bg)",
+            borderColor: "var(--border-subtle)",
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          }}
+        >
+          {navItems.map(({ path, icon: Icon, label, badge }) => {
+            const active = path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+            return (
+              <Link
+                key={path}
+                to={path}
+                className="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium"
+                style={{ color: active ? "var(--color-primary)" : "var(--text-muted)", minHeight: "unset", minWidth: "unset" }}
+              >
+                <div className="relative">
+                  <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.5 : 2} />
+                  {badge != null && (
+                    <span className="absolute -top-1 -right-1.5 h-3.5 w-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center">
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                </div>
+                <span>{label}</span>
+                {active && (
+                  <motion.div
+                    layoutId="mobile-nav-pip"
+                    className="absolute -bottom-[1px] left-1/2 h-0.5 w-6 rounded-t-full -translate-x-1/2"
+                    style={{ backgroundColor: "var(--color-primary)" }}
+                  />
                 )}
-              </div>
-              <span>{label}</span>
-              {active && (
-                <motion.div
-                  layoutId="mobile-nav-pip"
-                  className="absolute -bottom-[1px] left-1/2 h-0.5 w-6 rounded-t-full -translate-x-1/2"
-                  style={{ backgroundColor: "var(--color-primary)" }}
-                />
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Story viewer */}
       <AnimatePresence>
