@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -23,6 +23,7 @@ import {
   Camera,
   Loader2,
   Volume2,
+  Play,
   ArrowLeft,
   RefreshCw,
   Trash2,
@@ -471,7 +472,6 @@ function ProfileSettingsPane() {
               </div>
             </div>
           </div>
-          </div>
 
           <div className="flex items-center gap-3 w-full md:w-auto justify-end shrink-0">
             <button
@@ -563,6 +563,8 @@ function ProfileSettingsPane() {
             disabled
             value={profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "2026"}
             className="w-full rounded-2xl bg-[#202c33]/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-500 outline-none cursor-not-allowed"
+          />
+        </div>
       </div>
 
       {/* Avatar Preview & Crop Modal */}
@@ -1279,7 +1281,7 @@ function DevicesSettingsPane() {
       animIdRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       streamRef.current = null;
     }
     setCameraActive(false);
