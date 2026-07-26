@@ -75,11 +75,11 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
         />
       )}
 
-      <div className={clsx("max-w-[75%]", isOwn ? "items-end" : "items-start")}>
+      <div className={clsx("max-w-[75%] flex flex-col min-w-0", isOwn ? "items-end ml-auto" : "items-start mr-auto")}>
         {/* Reply preview */}
         {message.reply_to_id && (message as Message & { reply_to?: { content: string | null; sender?: { display_name: string } } }).reply_to && (
           <div className={clsx(
-            "mb-1 rounded-xl border-l-2 border-primary bg-surface px-3 py-2 text-xs shadow-sm",
+            "mb-1 rounded-xl border-l-2 border-primary bg-surface px-3 py-2 text-xs shadow-sm w-fit max-w-full",
             isOwn ? "ml-auto" : "",
           )}>
             <p className="font-semibold text-primary mb-0.5">
@@ -98,10 +98,10 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             setContextMenu({ x: e.clientX, y: e.clientY });
           }}
           className={clsx(
-            "relative px-4 py-2.5 text-[15px] leading-relaxed shadow-sm transition-all cursor-default",
+            "relative px-4 py-2.5 text-[15px] leading-relaxed shadow-sm transition-all cursor-default w-fit max-w-full",
             isOwn 
-              ? "rounded-2xl rounded-br-sm bg-gradient-to-br from-primary to-accent text-white shadow-primary/20" 
-              : "rounded-2xl rounded-bl-sm bg-surface border border-border-subtle text-main",
+              ? "rounded-2xl rounded-br-xs bg-gradient-to-br from-primary to-accent text-white shadow-primary/10" 
+              : "rounded-2xl rounded-bl-xs bg-surface border border-border-subtle text-main",
           )}
         >
           {/* Sender name in groups */}

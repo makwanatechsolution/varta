@@ -227,7 +227,7 @@ export function ChatRoomPage() {
           paddingTop: "max(12px, env(safe-area-inset-top, 12px))",
         }}
       >
-        <Link to="/" className="md:hidden transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }}>
+        <Link to="/" className="hidden max-md:inline-flex items-center justify-center p-1.5 rounded-full hover:bg-surface transition-colors" style={{ color: "var(--text-muted)" }}>
           <ArrowLeft className="h-5 w-5" />
         </Link>
 
