@@ -10,9 +10,9 @@ export function useConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
 
     const { data: memberships } = await supabase
       .from("conversation_members")
@@ -21,7 +21,7 @@ export function useConversations() {
 
     if (!memberships?.length) {
       setConversations([]);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
 
@@ -44,34 +44,34 @@ export function useConversations() {
     }
     
     // Process conversations to ensure last_message is correctly represented
-    // If last_message is an array (due to 1-to-many join without limit), take the most recent one
     const processedData = (data as any[])?.map(conv => {
       let lastMsg = conv.last_message;
       if (Array.isArray(lastMsg)) {
-        // Sort by created_at descending and pick the first one
         lastMsg = lastMsg.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
       return { ...conv, last_message: lastMsg };
     }) as Conversation[];
 
     setConversations(processedData ?? []);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [user]);
 
   useEffect(() => {
-    load();
+    load(false);
 
-    // Realtime: reload when conversations update
+    const silentReload = () => load(true);
+
+    // Realtime: silent reload when conversations or messages update
     const channel = supabase
       .channel("conversations_list")
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, load)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, silentReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, silentReload)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [load]);
 
-  return { conversations, loading, reload: load };
+  return { conversations, loading, reload: () => load(false) };
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
@@ -81,9 +81,9 @@ export function useMessages(conversationId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!conversationId || !user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const { data, error } = await supabase
       .from("messages")
       .select(`
@@ -102,12 +102,14 @@ export function useMessages(conversationId: string | undefined) {
     }
 
     setMessages((data as Message[]) ?? []);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [conversationId, user]);
 
   useEffect(() => {
     if (!conversationId || !user) return;
-    load();
+    load(false);
+
+    const silentReload = () => load(true);
 
     const channel = supabase
       .channel(`messages:${conversationId}`)
@@ -147,8 +149,8 @@ export function useMessages(conversationId: string | undefined) {
           return [...prev, newMsg];
         });
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, load)
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, load)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, silentReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, silentReload)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

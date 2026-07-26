@@ -8,6 +8,8 @@
   --color-border-subtle: var(--border-subtle);
   --color-primary: var(--color-primary);
   --color-accent: var(--color-accent);
+  --color-main: var(--text-main);
+  --color-muted: var(--text-muted);
   --color-success: #22C55E;
   --color-warning: #F59E0B;
   --color-error: #EF4444;
@@ -16,42 +18,55 @@
 }
 
 :root {
-  /* LIGHT THEME (Default) */
-  --bg-main: #F6F7FB;
-  --bg-sidebar: #FFFFFF;
-  --bg-surface: #F3F4F6;
-  --bg-card: #FFFFFF;
-  --border-subtle: #E5E7EB;
-  --text-main: #111827;
-  --text-muted: #6B7280;
-  --color-primary: #4F7CFF;
-  --color-accent: #4F7CFF;
+  /* VARTA DARK THEME (Default) */
+  --bg-main: #0b141a;
+  --bg-sidebar: #111b21;
+  --bg-surface: #1b2326;
+  --bg-card: #202c33;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-main: #e9edef;
+  --text-muted: #8696a0;
+  --color-primary: #1E88C7;
+  --color-accent: #1E88C7;
 }
 
 .dark {
-  /* DARK THEME */
-  --bg-main: #09090B;
-  --bg-sidebar: #111217;
-  --bg-surface: #17181D;
-  --bg-card: #1D1E24;
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --text-main: #F9FAFB;
-  --text-muted: #9CA3AF;
-  --color-primary: #4F7CFF;
-  --color-accent: #4F7CFF;
+  /* VARTA DARK THEME */
+  --bg-main: #0b141a;
+  --bg-sidebar: #111b21;
+  --bg-surface: #1b2326;
+  --bg-card: #202c33;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-main: #e9edef;
+  --text-muted: #8696a0;
+  --color-primary: #1E88C7;
+  --color-accent: #1E88C7;
 }
 
 .amoled {
-  /* AMOLED BLACK THEME */
+  /* AMOLED PURE BLACK THEME */
   --bg-main: #000000;
-  --bg-sidebar: #000000;
-  --bg-surface: #050505;
-  --bg-card: #0A0A0A;
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --text-main: #F9FAFB;
-  --text-muted: #6B7280;
-  --color-primary: #4F7CFF;
-  --color-accent: #4F7CFF;
+  --bg-sidebar: #050505;
+  --bg-surface: #0a0a0a;
+  --bg-card: #121212;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --text-main: #ffffff;
+  --text-muted: #71717a;
+  --color-primary: #1E88C7;
+  --color-accent: #1E88C7;
+}
+
+.midnight {
+  /* MIDNIGHT NAVY THEME */
+  --bg-main: #0f172a;
+  --bg-sidebar: #1e293b;
+  --bg-surface: #334155;
+  --bg-card: #1e293b;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --color-primary: #38bdf8;
+  --color-accent: #38bdf8;
 }
 
 * {
@@ -63,6 +78,8 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  background-color: var(--bg-main);
+  color: var(--text-main);
 }
 
 body {
@@ -70,14 +87,13 @@ body {
   -webkit-font-smoothing: antialiased;
   background-color: var(--bg-main);
   color: var(--text-main);
-  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #374045; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+::-webkit-scrollbar-thumb { background: #202c33; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #374045; }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -90,7 +106,7 @@ body {
   flex-direction: column;
   border-radius: 16px;
   background: #111b21;
-  border: 1px solid #2d3748;
+  border: 1px solid #202c33;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
@@ -99,110 +115,53 @@ body {
   padding: 10px 10px 6px;
   border-bottom: 1px solid #202c33;
 }
-
-.emoji-picker__search {
+.emoji-picker__search-input {
   width: 100%;
   background: #202c33;
-  border: none;
-  border-radius: 20px;
-  padding: 6px 14px;
-  color: #e9edef;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 7px 12px;
   font-size: 13px;
+  color: #fff;
   outline: none;
 }
 
-.emoji-picker__search::placeholder {
-  color: #4a5568;
-}
-
-.emoji-picker__tabs {
+.emoji-picker__categories {
   display: flex;
-  gap: 2px;
-  padding: 6px 8px;
+  justify-content: space-around;
+  padding: 6px 4px;
   border-bottom: 1px solid #202c33;
-  overflow-x: auto;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
-
-.emoji-picker__tabs::-webkit-scrollbar { display: none; }
-
-.emoji-picker__tab {
+.emoji-picker__category-btn {
   background: none;
   border: none;
+  font-size: 16px;
   cursor: pointer;
-  font-size: 18px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  transition: background 0.15s;
-  flex-shrink: 0;
   opacity: 0.6;
+  transition: opacity 0.15s ease;
 }
-
-.emoji-picker__tab:hover {
-  background: #202c33;
-  opacity: 1;
-}
-
-.emoji-picker__tab.active {
-  background: #1E88C7/20;
-  background-color: rgba(37, 211, 102, 0.15);
+.emoji-picker__category-btn:hover,
+.emoji-picker__category-btn--active {
   opacity: 1;
 }
 
 .emoji-picker__grid {
   flex: 1;
-  overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
-  padding: 8px;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 10px;
+  overflow-y: auto;
 }
-
-.emoji-picker__btn {
+.emoji-picker__emoji-btn {
   background: none;
   border: none;
-  cursor: pointer;
   font-size: 20px;
-  padding: 4px;
+  cursor: pointer;
   border-radius: 8px;
-  transition: transform 0.1s, background 0.1s;
-  line-height: 1;
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 4px;
+  transition: background 0.15s ease;
 }
-
-.emoji-picker__btn:hover {
-  background: #202c33;
-  transform: scale(1.25);
+.emoji-picker__emoji-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
-
-/* ─── Animations ─────────────────────────────────────────────────────────── */
-@keyframes bounce-dot {
-  0%, 100% { transform: translateY(0); opacity: 0.5; }
-  50% { transform: translateY(-4px); opacity: 1; }
-}
-
-.animate-bounce {
-  animation: bounce 1s ease-in-out infinite;
-}
-
-@keyframes bounce {
-  0%, 100% { transform: translateY(-4%); }
-  50% { transform: translateY(0); }
-}
-
-/* ─── Focus ring ──────────────────────────────────────────────────────────── */
-input:focus, textarea:focus, select:focus {
-  outline: none;
-}
-
-/* ─── Transition defaults ────────────────────────────────────────────────── */
-button { cursor: pointer; }
-button:disabled { cursor: not-allowed; }
-
-/* ─── Safe area ──────────────────────────────────────────────────────────── */
-.pt-safe { padding-top: env(safe-area-inset-top); }
-.pb-safe { padding-bottom: env(safe-area-inset-bottom); }

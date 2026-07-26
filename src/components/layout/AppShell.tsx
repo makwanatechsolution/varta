@@ -67,10 +67,10 @@ export function AppShell() {
   ];
 
   return (
-    <div className="flex h-screen bg-background text-main overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#0b141a] text-white overflow-hidden font-sans">
       
       {/* ─── Narrow Left Navigation Rail (Desktop) ─────────────────────────── */}
-      <nav className="hidden md:flex flex-col items-center py-6 w-[72px] shrink-0 border-r border-border-subtle bg-sidebar z-20 shadow-sm">
+      <nav className="hidden md:flex flex-col items-center py-6 w-[72px] shrink-0 border-r border-zinc-800 bg-[#0b141a] z-20 shadow-xl">
         <Link to="/settings" title="Profile Settings" className="mb-6 relative transition-transform hover:scale-105 active:scale-95">
           <Avatar
             src={profile?.avatar_url}
@@ -91,12 +91,12 @@ export function AppShell() {
                 title={label}
                 className={clsx(
                   "relative flex items-center justify-center h-12 w-12 rounded-2xl transition-all duration-200",
-                  active ? "bg-primary text-white shadow-md shadow-primary/20" : "text-muted hover:bg-surface hover:text-main"
+                  active ? "bg-[#1E88C7] text-white shadow-lg shadow-[#1E88C7]/20" : "text-zinc-400 hover:bg-[#1b2326] hover:text-white"
                 )}
               >
                 <Icon className={clsx("h-6 w-6", active ? "stroke-[2.5px]" : "stroke-[2px]")} />
                 {badge && (
-                  <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-error border-2 border-sidebar" />
+                  <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-[#0b141a]" />
                 )}
               </Link>
             );
@@ -120,8 +120,11 @@ export function AppShell() {
           )}
           <Link
             to="/archive"
-            title="Archive"
-            className="flex items-center justify-center h-12 w-12 rounded-2xl text-muted hover:bg-surface hover:text-main transition-colors"
+            title="Archived Chats"
+            className={clsx(
+              "flex items-center justify-center h-12 w-12 rounded-2xl transition-colors",
+              location.pathname.startsWith("/archive") ? "bg-[#1E88C7] text-white shadow-md shadow-[#1E88C7]/20" : "text-zinc-400 hover:bg-[#1b2326] hover:text-white"
+            )}
           >
             <Archive className="h-6 w-6" />
           </Link>
@@ -130,7 +133,7 @@ export function AppShell() {
             title="Settings"
             className={clsx(
               "flex items-center justify-center h-12 w-12 rounded-2xl transition-colors",
-              location.pathname.startsWith("/settings") ? "bg-primary text-white shadow-md shadow-primary/20" : "text-muted hover:bg-surface hover:text-main"
+              location.pathname.startsWith("/settings") ? "bg-[#1E88C7] text-white shadow-md shadow-[#1E88C7]/20" : "text-zinc-400 hover:bg-[#1b2326] hover:text-white"
             )}
           >
             <Settings className={clsx("h-6 w-6", location.pathname.startsWith("/settings") ? "stroke-[2.5px]" : "stroke-[2px]")} />
@@ -148,19 +151,19 @@ export function AppShell() {
 
       {/* ─── Secondary Sidebar (List Panel) ────────────────────────────────── */}
       <aside className={clsx(
-        "flex w-full md:w-[380px] flex-col border-r border-border-subtle bg-surface z-10 shrink-0 transition-all",
+        "flex w-full md:w-[380px] flex-col border-r border-zinc-800 bg-[#111b21] z-10 shrink-0 transition-all",
         location.pathname === "/" ? "" : "hidden md:flex"
       )}>
         {/* Header */}
         <header className="flex items-center justify-between px-5 pt-6 pb-4">
-          <h1 className="text-2xl font-semibold tracking-tight text-main">Chats</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Chats</h1>
           <div className="flex items-center gap-1">
-            <button className="rounded-full p-2 text-muted hover:bg-card hover:text-main transition-colors" title="Filter unread">
+            <button className="rounded-full p-2 text-zinc-400 hover:bg-[#1b2326] hover:text-white transition-colors" title="Filter unread">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
               </svg>
             </button>
-            <Link to="/new-chat" className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors" title="New Chat">
+            <Link to="/new-chat" className="rounded-full p-2 text-[#1E88C7] hover:bg-[#1E88C7]/10 transition-colors" title="New Chat">
               <Plus className="h-6 w-6 stroke-[2.5px]" />
             </Link>
           </div>
@@ -169,12 +172,12 @@ export function AppShell() {
         {/* Search */}
         <div className="px-4 pb-4">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search or start a new chat"
-              className="w-full rounded-2xl bg-card border border-border-subtle py-2.5 pl-11 pr-4 text-[15px] text-main outline-none placeholder:text-muted focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
+              className="w-full rounded-2xl bg-[#1b2326] border border-zinc-800 py-2.5 pl-11 pr-4 text-[15px] text-white outline-none placeholder:text-zinc-500 focus:border-[#1E88C7] transition-all shadow-sm"
             />
           </div>
         </div>
@@ -250,7 +253,7 @@ export function AppShell() {
                     to={`/chat/${conv.id}`}
                     className={clsx(
                       "group relative flex items-center gap-3.5 rounded-2xl px-3 py-3 mb-1 transition-all",
-                      isActive ? "bg-primary text-white shadow-md shadow-primary/20" : "hover:bg-card"
+                      isActive ? "bg-[#1E88C7] text-white shadow-lg shadow-[#1E88C7]/20 font-semibold" : "hover:bg-[#1b2326] text-white"
                     )}
                   >
                     <Avatar
@@ -262,11 +265,11 @@ export function AppShell() {
                     />
                     <div className="min-w-0 flex-1 flex flex-col justify-center">
                       <div className="flex justify-between items-baseline mb-0.5">
-                        <p className="truncate font-semibold text-[15px] tracking-tight">{getConversationTitle(conv, user!.id)}</p>
+                        <p className="truncate font-semibold text-[15px] tracking-tight text-white">{getConversationTitle(conv, user!.id)}</p>
                         {conv.last_message_at && (
                           <span className={clsx(
                             "text-[11px] font-medium shrink-0 ml-2 transition-colors",
-                            isActive ? "text-white/80" : "text-muted group-hover:text-main"
+                            isActive ? "text-white/80" : "text-zinc-400 group-hover:text-white"
                           )}>
                             {new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </span>
@@ -275,7 +278,7 @@ export function AppShell() {
                       <div className="flex justify-between items-center">
                         <p className={clsx(
                           "truncate text-[13px] transition-colors flex-1 mr-2",
-                          isActive ? "text-white/90" : (isTyping ? "text-primary font-medium" : "text-muted")
+                          isActive ? "text-white/90" : (isTyping ? "text-[#1E88C7] font-medium" : "text-zinc-400")
                         )}>
                           {isTyping ? "typing..." : (preview ?? (
                             conv.type === "group" ? "Group chat" : "Tap to chat"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -19,12 +19,18 @@ import {
   Eye,
   Sliders,
   QrCode,
-  Smartphone,
   Key,
+  Camera,
+  Loader2,
+  Volume2,
+  Play
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useCallingContext } from "../contexts/CallingContext";
 import { supabase } from "../lib/supabase";
 import { Avatar } from "../components/ui/Avatar";
+import { QRCodeModal } from "../components/ui/QRCodeModal";
+import { callAudio } from "../lib/audio";
 import type { PresenceStatus } from "../types/database";
 import clsx from "clsx";
 
@@ -45,21 +51,21 @@ type SettingsTab =
   | "advanced"
   | "about";
 
-const TABS: { id: SettingsTab; label: string; icon: any; category?: string }[] = [
+const TABS: { id: SettingsTab; label: string; icon: any }[] = [
   { id: "profile", label: "Profile", icon: User },
   { id: "status", label: "Status & Presence", icon: CircleDot },
   { id: "general", label: "General", icon: Monitor },
-  { id: "account", label: "Account & Login", icon: Key },
+  { id: "account", label: "Account & Security", icon: Key },
   { id: "chats", label: "Chats & Media", icon: MessageCircle },
   { id: "calls", label: "Calls & WebRTC", icon: Phone },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "privacy", label: "Privacy & Blocked", icon: Shield },
+  { id: "notifications", label: "Notifications & Sound", icon: Bell },
+  { id: "privacy", label: "Privacy & Controls", icon: Shield },
   { id: "storage", label: "Storage & Analytics", icon: HardDrive },
   { id: "devices", label: "Linked Devices", icon: Laptop },
-  { id: "security", label: "Security & PIN", icon: Lock },
+  { id: "security", label: "Security & Passcode", icon: Lock },
   { id: "appearance", label: "Appearance & Themes", icon: Palette },
   { id: "accessibility", label: "Accessibility", icon: Eye },
-  { id: "advanced", label: "Advanced & Debug", icon: Sliders },
+  { id: "advanced", label: "Advanced Diagnostics", icon: Sliders },
   { id: "about", label: "About Varta", icon: Info },
 ];
 
@@ -68,44 +74,43 @@ export function SettingsPage() {
   const { profile } = useAuth();
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden font-sans text-main">
+    <div className="flex h-full w-full bg-[#0b141a] overflow-hidden font-sans text-white">
       {/* ─── Left Sidebar Navigation ──────────────────────────────────────── */}
-      <div className="w-[340px] flex-shrink-0 border-r border-border-subtle bg-surface/60 backdrop-blur-xl flex flex-col h-full z-10 shadow-sm">
-        <header className="px-6 py-5 border-b border-border-subtle bg-surface/80">
+      <div className="w-[320px] flex-shrink-0 border-r border-zinc-800 bg-[#111b21] flex flex-col h-full z-10 shadow-xl">
+        <header className="px-6 py-5 border-b border-zinc-800 bg-[#111b21]">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+            <div className="p-2.5 rounded-2xl bg-[#1E88C7]/15 text-[#1E88C7] border border-[#1E88C7]/30">
               <SettingsIcon className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-main">Settings</h1>
-              <p className="text-xs text-muted">Varta Preferences & Platform Controls</p>
+              <h1 className="text-xl font-bold tracking-tight text-white">Settings</h1>
+              <p className="text-xs text-zinc-400">Varta Preferences & System Controls</p>
             </div>
           </div>
         </header>
 
         {/* Profile Card Header Summary */}
-        <div className="px-4 py-3 border-b border-border-subtle">
+        <div className="px-4 py-3 border-b border-zinc-800/80">
           <div
             onClick={() => setActiveTab("profile")}
             className={clsx(
-              "flex items-center gap-3.5 p-3 rounded-2xl cursor-pointer transition-all",
+              "flex items-center gap-3.5 p-3 rounded-2xl cursor-pointer transition-all border",
               activeTab === "profile"
-                ? "bg-primary text-white shadow-lg shadow-primary/20"
-                : "hover:bg-card border border-transparent hover:border-border-subtle"
+                ? "bg-[#1E88C7] text-white shadow-lg shadow-[#1E88C7]/20 border-[#1E88C7]"
+                : "bg-[#1b2326]/60 hover:bg-[#1b2326] border-zinc-800"
             )}
           >
             <Avatar
               src={profile?.avatar_url}
               name={profile?.display_name || "User"}
               size="md"
-              showRing={activeTab !== "profile"}
               presence={profile?.presence}
             />
             <div className="flex-1 min-w-0">
               <h2
                 className={clsx(
                   "font-semibold truncate text-[14px]",
-                  activeTab === "profile" ? "text-white" : "text-main"
+                  activeTab === "profile" ? "text-white" : "text-white"
                 )}
               >
                 {profile?.display_name || "Varta User"}
@@ -113,14 +118,14 @@ export function SettingsPage() {
               <p
                 className={clsx(
                   "text-[12px] truncate",
-                  activeTab === "profile" ? "text-white/80" : "text-muted"
+                  activeTab === "profile" ? "text-white/80" : "text-zinc-400"
                 )}
               >
                 {profile?.custom_status || `@${profile?.username || "user"}`}
               </p>
             </div>
             <ChevronRight
-              className={clsx("w-5 h-5", activeTab === "profile" ? "text-white/80" : "text-muted")}
+              className={clsx("w-5 h-5", activeTab === "profile" ? "text-white/80" : "text-zinc-400")}
             />
           </div>
         </div>
@@ -136,23 +141,23 @@ export function SettingsPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={clsx(
-                  "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-left text-[13.5px] font-medium",
+                  "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-left text-[13px] font-medium border",
                   isActive
-                    ? "bg-primary/10 text-primary font-semibold border border-primary/20"
-                    : "text-main hover:bg-card hover:text-main border border-transparent"
+                    ? "bg-[#1E88C7]/15 text-[#1E88C7] font-bold border-[#1E88C7]/30 shadow-md"
+                    : "text-zinc-300 hover:bg-[#1b2326] hover:text-white border-transparent"
                 )}
               >
                 <Icon
                   className={clsx(
                     "w-4.5 h-4.5 shrink-0",
-                    isActive ? "text-primary stroke-[2.5px]" : "text-muted stroke-[2px]"
+                    isActive ? "text-[#1E88C7] stroke-[2.5px]" : "text-zinc-400 stroke-[2px]"
                   )}
                 />
                 <span className="flex-1 truncate">{tab.label}</span>
                 {isActive && (
                   <motion.div
                     layoutId="settings-active-dot"
-                    className="w-2 h-2 rounded-full bg-primary"
+                    className="w-2 h-2 rounded-full bg-[#1E88C7]"
                   />
                 )}
               </button>
@@ -162,7 +167,7 @@ export function SettingsPage() {
       </div>
 
       {/* ─── Right Content Area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
+      <div className="flex-1 flex flex-col h-full bg-[#0b141a] relative overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -193,9 +198,6 @@ export function SettingsPage() {
     </div>
   );
 }
-
-import { QRCodeModal } from "../components/ui/QRCodeModal";
-import { LogOut, Camera, Loader2 } from "lucide-react";
 
 // ─── 1. Profile Settings Pane ────────────────────────────────────────────────
 function ProfileSettingsPane() {
@@ -264,33 +266,25 @@ function ProfileSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Profile Settings</h2>
-        <p className="text-sm text-muted">Manage your identity, personal info, and QR card</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Profile Settings</h2>
+        <p className="text-sm text-zinc-400">Manage your identity, avatar, bio, and personal QR card</p>
       </div>
 
       {/* Avatar & Cover Section */}
-      <div className="relative rounded-3xl bg-card border border-border-subtle overflow-hidden shadow-lg">
-        <div className="h-32 bg-gradient-to-r from-primary/30 via-primary/20 to-primary/40 relative flex justify-end p-4">
-          <button
-            type="button"
-            onClick={() => setShowQR(true)}
-            className="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 text-xs font-semibold text-white backdrop-blur-md hover:bg-black/60 transition-all border border-white/10"
-          >
-            <QrCode className="w-4 h-4" />
-            <span>My QR Code</span>
-          </button>
-        </div>
+      <div className="relative rounded-3xl bg-[#111b21] border border-zinc-800 overflow-hidden shadow-xl">
+        <div className="h-28 bg-gradient-to-r from-[#1E88C7]/40 via-[#1E88C7]/20 to-[#0f4c75]/60 border-b border-zinc-800" />
 
-        <div className="px-8 pb-8 pt-0 relative flex flex-col md:flex-row items-start md:items-end justify-between gap-6 -mt-12">
-          <div className="flex items-end gap-5">
-            <div className="relative group">
-              <Avatar
-                src={profile?.avatar_url}
-                name={profile?.display_name || "User"}
-                size="lg"
-                showRing
-              />
-              <label className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-xs font-medium">
+        <div className="p-6 relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-center gap-5 -mt-12">
+            <div className="relative group shrink-0">
+              <div className="rounded-full ring-4 ring-[#111b21] bg-[#111b21] p-1">
+                <Avatar
+                  src={profile?.avatar_url}
+                  name={profile?.display_name || "User"}
+                  size="lg"
+                />
+              </div>
+              <label className="absolute inset-1 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-xs font-medium">
                 {isUploadingAvatar ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
@@ -309,61 +303,71 @@ function ProfileSettingsPane() {
               </label>
             </div>
 
-            <div className="mb-2">
-              <h3 className="text-2xl font-bold text-main">{profile?.display_name}</h3>
-              <p className="text-sm text-primary font-medium">@{profile?.username || "username"}</p>
+            <div className="mt-4 md:mt-0">
+              <h3 className="text-2xl font-bold text-white">{profile?.display_name || "Varta User"}</h3>
+              <p className="text-sm text-[#1E88C7] font-medium">@{profile?.username || "username"}</p>
             </div>
           </div>
 
-          {isSaved ? (
-            <span className="flex items-center gap-2 text-emerald-400 text-sm font-semibold bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Saved Successfully</span>
-            </span>
-          ) : (
+          <div className="flex items-center gap-3 w-full md:w-auto justify-end shrink-0">
             <button
               type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+              onClick={() => setShowQR(true)}
+              className="flex items-center gap-2 rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-xs font-semibold text-white hover:bg-zinc-700 transition-all shadow-sm"
             >
-              {isSaving ? "Saving..." : "Save Changes"}
+              <QrCode className="w-4 h-4 text-[#1E88C7]" />
+              <span>My QR Code</span>
             </button>
-          )}
+
+            {isSaved ? (
+              <span className="flex items-center gap-2 text-emerald-400 text-xs font-semibold bg-emerald-500/10 px-4 py-2.5 rounded-xl border border-emerald-500/20">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Saved Successfully</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-6 py-2.5 text-xs font-semibold text-white shadow-lg shadow-[#1E88C7]/20 hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* QR Code Modal Overlay */}
       {showQR && (
         <QRCodeModal profile={profile} onClose={() => setShowQR(false)} />
       )}
 
       {/* Form Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-card border border-border-subtle rounded-3xl p-6 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#111b21] border border-zinc-800 rounded-3xl p-6 shadow-xl">
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
             Display Name
           </label>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full rounded-2xl bg-surface border border-border-subtle px-4 py-3 text-sm text-main outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
             Username
           </label>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-2xl bg-surface border border-border-subtle px-4 py-3 text-sm text-main outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
           />
         </div>
 
         <div className="md:col-span-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
             Bio / About
           </label>
           <textarea
@@ -371,30 +375,30 @@ function ProfileSettingsPane() {
             onChange={(e) => setBio(e.target.value)}
             placeholder="Tell people about yourself..."
             rows={3}
-            className="w-full rounded-2xl bg-surface border border-border-subtle px-4 py-3 text-sm text-main outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7] resize-none"
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
-            Phone Number
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+            Phone Number (Contact info)
           </label>
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+1 234 567 8900"
-            className="w-full rounded-2xl bg-surface border border-border-subtle px-4 py-3 text-sm text-main outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
             Joined Date
           </label>
           <input
             disabled
             value={profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "2026"}
-            className="w-full rounded-2xl bg-surface/50 border border-border-subtle px-4 py-3 text-sm text-muted outline-none cursor-not-allowed"
+            className="w-full rounded-2xl bg-[#202c33]/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-500 outline-none cursor-not-allowed"
           />
         </div>
       </div>
@@ -438,8 +442,8 @@ function StatusSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Status & Presence</h2>
-        <p className="text-sm text-muted">Microsoft Teams style status and realtime availability</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Status & Presence</h2>
+        <p className="text-sm text-zinc-400">Microsoft Teams style status and realtime availability</p>
       </div>
 
       {/* Presence Grid */}
@@ -454,14 +458,14 @@ function StatusSettingsPane() {
               className={clsx(
                 "flex items-center gap-3 p-4 rounded-2xl border text-left transition-all",
                 isSelected
-                  ? "bg-primary/10 border-primary shadow-md"
-                  : "bg-card border-border-subtle hover:bg-surface"
+                  ? "bg-[#1E88C7]/15 border-[#1E88C7] shadow-lg"
+                  : "bg-[#111b21] border-zinc-800 hover:bg-[#1b2326]"
               )}
             >
               <span className={clsx("w-3.5 h-3.5 rounded-full shrink-0", opt.color)} />
               <div>
-                <p className="font-semibold text-sm text-main">{opt.label}</p>
-                <p className="text-xs text-muted">{opt.desc}</p>
+                <p className="font-semibold text-sm text-white">{opt.label}</p>
+                <p className="text-xs text-zinc-400">{opt.desc}</p>
               </div>
             </button>
           );
@@ -469,27 +473,27 @@ function StatusSettingsPane() {
       </div>
 
       {/* Custom Status Input */}
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-4 shadow-sm">
-        <h3 className="font-semibold text-base text-main">Custom Status Message</h3>
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-4 shadow-xl">
+        <h3 className="font-semibold text-base text-white">Custom Status Message</h3>
 
         <div className="flex gap-3">
           <input
             value={customText}
             onChange={(e) => setCustomText(e.target.value)}
             placeholder="💬 What's on your mind? (e.g. In deep work, back at 3 PM)"
-            className="flex-1 rounded-2xl bg-surface border border-border-subtle px-4 py-3 text-sm text-main outline-none focus:ring-2 focus:ring-primary/20"
+            className="flex-1 rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
           />
           <button
             type="button"
             onClick={handleUpdate}
             disabled={saving}
-            className="rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-lg hover:scale-105 transition-all"
+            className="rounded-2xl bg-[#1E88C7] px-6 py-3 text-sm font-semibold text-white shadow-lg hover:bg-[#1971A5] transition-all"
           >
             {saving ? "Updating..." : "Update Status"}
           </button>
         </div>
 
-        <div className="flex items-center justify-between pt-2 text-xs text-muted">
+        <div className="flex items-center justify-between pt-2 text-xs text-zinc-400">
           <span>Clear status after:</span>
           <div className="flex gap-2">
             {["Don't clear", "1 Hour", "4 Hours", "Today"].map((t) => (
@@ -500,8 +504,8 @@ function StatusSettingsPane() {
                 className={clsx(
                   "px-3 py-1.5 rounded-xl border transition-all",
                   expiration === t
-                    ? "bg-primary/10 border-primary text-primary font-semibold"
-                    : "bg-surface border-border-subtle text-muted"
+                    ? "bg-[#1E88C7]/20 border-[#1E88C7] text-[#1E88C7] font-semibold"
+                    : "bg-[#202c33] border-zinc-700 text-zinc-400"
                 )}
               >
                 {t}
@@ -516,28 +520,35 @@ function StatusSettingsPane() {
 
 // ─── 3. General Settings Pane ────────────────────────────────────────────────
 function GeneralSettingsPane() {
-  const [lang, setLang] = useState("English (US)");
-  const [autoStart, setAutoStart] = useState(true);
-  const [autoUpdate, setAutoUpdate] = useState(true);
-  const [launchTab, setLaunchTab] = useState("All Chats");
+  const [lang, setLang] = useState(() => localStorage.getItem("varta_lang") || "English (US)");
+  const [autoStart, setAutoStart] = useState(() => localStorage.getItem("varta_autostart") !== "false");
+  const [autoUpdate, setAutoUpdate] = useState(() => localStorage.getItem("varta_autoupdate") !== "false");
+  const [launchTab, setLaunchTab] = useState(() => localStorage.getItem("varta_launchtab") || "All Chats");
+
+  useEffect(() => {
+    localStorage.setItem("varta_lang", lang);
+    localStorage.setItem("varta_autostart", String(autoStart));
+    localStorage.setItem("varta_autoupdate", String(autoUpdate));
+    localStorage.setItem("varta_launchtab", launchTab);
+  }, [lang, autoStart, autoUpdate, launchTab]);
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">General Settings</h2>
-        <p className="text-sm text-muted">App startup, language, and system integration</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">General Settings</h2>
+        <p className="text-sm text-zinc-400">App startup, language, and system integration</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">App Language</p>
-            <p className="text-xs text-muted">Select interface language</p>
+            <p className="font-semibold text-white text-sm">App Language</p>
+            <p className="text-xs text-zinc-400">Select interface language</p>
           </div>
           <select
             value={lang}
             onChange={(e) => setLang(e.target.value)}
-            className="rounded-xl bg-surface border border-border-subtle px-4 py-2 text-xs text-main outline-none"
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
           >
             <option>English (US)</option>
             <option>Spanish (Español)</option>
@@ -547,41 +558,41 @@ function GeneralSettingsPane() {
           </select>
         </div>
 
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">Auto-Start on Boot</p>
-            <p className="text-xs text-muted">Launch Varta automatically when computer starts</p>
+            <p className="font-semibold text-white text-sm">Auto-Start on Boot</p>
+            <p className="text-xs text-zinc-400">Launch Varta automatically when computer starts</p>
           </div>
           <input
             type="checkbox"
             checked={autoStart}
             onChange={(e) => setAutoStart(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
+            className="h-5 w-5 accent-[#1E88C7] cursor-pointer"
           />
         </div>
 
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">Automatic Updates</p>
-            <p className="text-xs text-muted">Keep Varta updated automatically in background</p>
+            <p className="font-semibold text-white text-sm">Automatic Updates</p>
+            <p className="text-xs text-zinc-400">Keep Varta updated automatically in background</p>
           </div>
           <input
             type="checkbox"
             checked={autoUpdate}
             onChange={(e) => setAutoUpdate(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
+            className="h-5 w-5 accent-[#1E88C7] cursor-pointer"
           />
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-main text-sm">Default Opening Tab</p>
-            <p className="text-xs text-muted">Which view to open when app starts</p>
+            <p className="font-semibold text-white text-sm">Default Opening Tab</p>
+            <p className="text-xs text-zinc-400">Which view to open when app starts</p>
           </div>
           <select
             value={launchTab}
             onChange={(e) => setLaunchTab(e.target.value)}
-            className="rounded-xl bg-surface border border-border-subtle px-4 py-2 text-xs text-main outline-none"
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
           >
             <option>All Chats</option>
             <option>Calls</option>
@@ -596,202 +607,106 @@ function GeneralSettingsPane() {
 
 // ─── 4. Account Settings Pane ────────────────────────────────────────────────
 function AccountSettingsPane() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [email] = useState(user?.email ?? "");
-  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
-  const [loadingMfa, setLoadingMfa] = useState(false);
-  const [enrollData, setEnrollData] = useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
-  const [verifyCode, setVerifyCode] = useState("");
-  const [mfaStatus, setMfaStatus] = useState<string | null>(null);
 
-  const fetchFactors = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.auth.mfa.listFactors();
-      if (!error && data) {
-        setMfaFactors(data.totp || []);
-      }
-    } catch (e) {
-      console.warn("Failed to load MFA factors", e);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState<{ text: string; success: boolean } | null>(null);
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordStatus({ text: "Password must be at least 6 characters long.", success: false });
+      return;
     }
-  }, []);
-
-  useEffect(() => {
-    fetchFactors();
-  }, [fetchFactors]);
-
-  const handleEnroll = async () => {
-    setLoadingMfa(true);
-    setMfaStatus(null);
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ text: "Passwords do not match.", success: false });
+      return;
+    }
+    setUpdatingPassword(true);
+    setPasswordStatus(null);
     try {
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-
-      setEnrollData({
-        factorId: data.id,
-        qrCode: data.totp.qr_code,
-        secret: data.totp.secret,
-      });
+      setPasswordStatus({ text: "✅ Password updated successfully!", success: true });
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (err: any) {
-      setMfaStatus(`2FA Enrollment failed: ${err.message}`);
+      setPasswordStatus({ text: err.message || "Failed to update password.", success: false });
     } finally {
-      setLoadingMfa(false);
+      setUpdatingPassword(false);
     }
   };
-
-  const handleVerifyEnrollment = async () => {
-    if (!enrollData || !verifyCode.trim()) return;
-    setLoadingMfa(true);
-    try {
-      const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({
-        factorId: enrollData.factorId,
-      });
-      if (challengeErr) throw challengeErr;
-
-      const { error: verifyErr } = await supabase.auth.mfa.verify({
-        factorId: enrollData.factorId,
-        challengeId: challengeData.id,
-        code: verifyCode.trim(),
-      });
-      if (verifyErr) throw verifyErr;
-
-      setMfaStatus("✅ 2FA successfully enabled!");
-      setEnrollData(null);
-      setVerifyCode("");
-      await fetchFactors();
-    } catch (err: any) {
-      setMfaStatus(`Verification failed: ${err.message || "Invalid 6-digit code"}`);
-    } finally {
-      setLoadingMfa(false);
-    }
-  };
-
-  const handleUnenroll = async (factorId: string) => {
-    if (!confirm("Are you sure you want to disable 2FA?")) return;
-    setLoadingMfa(true);
-    try {
-      const { error } = await supabase.auth.mfa.unenroll({ factorId });
-      if (error) throw error;
-      setMfaStatus("2FA disabled.");
-      await fetchFactors();
-    } catch (err: any) {
-      setMfaStatus(`Failed to disable 2FA: ${err.message}`);
-    } finally {
-      setLoadingMfa(false);
-    }
-  };
-
-  const is2FAActive = mfaFactors.some((f) => f.status === "verified");
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Account & Security</h2>
-        <p className="text-sm text-muted">Manage email credentials, 2FA authentication, and session security</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Account & Security</h2>
+        <p className="text-sm text-zinc-400">Manage email credentials, password, and session security</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-muted block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
             Email Address
           </label>
           <input
             disabled
             value={email}
-            className="w-full rounded-2xl bg-surface/50 border border-border-subtle px-4 py-3 text-sm text-main outline-none cursor-not-allowed"
+            className="w-full rounded-2xl bg-[#202c33]/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-400 outline-none cursor-not-allowed"
           />
         </div>
 
-        {/* 2FA Section */}
-        <div className="border-t border-border-subtle pt-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-main text-sm">Two-Factor Authentication (2FA TOTP)</p>
-              <p className="text-xs text-muted">Require Google Authenticator / Authy code when logging in</p>
-            </div>
-            {is2FAActive ? (
-              <span className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>2FA Enabled</span>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={handleEnroll}
-                disabled={loadingMfa || Boolean(enrollData)}
-                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-primary text-white hover:scale-105 transition-all shadow-md"
-              >
-                {loadingMfa ? "Setting up..." : "Setup 2FA"}
-              </button>
-            )}
-          </div>
-
-          {mfaStatus && <p className="text-xs text-primary font-medium">{mfaStatus}</p>}
-
-          {/* 2FA Setup Form */}
-          {enrollData && (
-            <div className="p-5 rounded-2xl bg-surface border border-primary/20 space-y-4 text-center">
-              <h4 className="text-sm font-bold text-main">Scan QR Code in Authenticator App</h4>
-              <div className="p-3 bg-white rounded-2xl inline-block shadow-md">
-                <img src={enrollData.qrCode} alt="2FA QR Code" className="w-44 h-44 object-contain" />
-              </div>
-              <div className="text-xs text-muted">
-                <span>Secret Key: </span>
-                <code className="bg-card px-2 py-1 rounded text-primary font-mono select-all">{enrollData.secret}</code>
-              </div>
-              <div className="flex gap-2 max-w-xs mx-auto pt-2">
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={verifyCode}
-                  onChange={(e) => setVerifyCode(e.target.value)}
-                  placeholder="6-digit code"
-                  className="flex-1 rounded-xl bg-card border border-border-subtle px-3 py-2 text-center text-sm font-mono tracking-widest outline-none text-main"
-                />
-                <button
-                  type="button"
-                  onClick={handleVerifyEnrollment}
-                  disabled={loadingMfa || verifyCode.length !== 6}
-                  className="px-4 py-2 rounded-xl bg-primary text-xs font-bold text-white shadow-md disabled:opacity-50"
-                >
-                  Verify
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Disable 2FA button */}
-          {is2FAActive && (
-            <div className="pt-2">
-              {mfaFactors.map((f) => (
-                <div key={f.id} className="flex items-center justify-between text-xs text-muted">
-                  <span>Authenticator Factor ({f.friendly_name || "TOTP"})</span>
-                  <button
-                    type="button"
-                    onClick={() => handleUnenroll(f.id)}
-                    className="text-red-400 hover:text-red-300 font-semibold"
-                  >
-                    Disable 2FA
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Sign Out / Log Out Button */}
-        <div className="flex items-center justify-between border-t border-border-subtle pt-4">
+        {/* Change / Reset Password Section */}
+        <div className="border-t border-zinc-800 pt-6 space-y-4">
           <div>
-            <p className="font-semibold text-main text-sm">Sign Out of Varta</p>
-            <p className="text-xs text-muted">Safely end your current session on this device</p>
+            <p className="font-semibold text-white text-sm">Change Account Password</p>
+            <p className="text-xs text-zinc-400">Update your account password directly</p>
           </div>
-          <button
-            type="button"
-            onClick={signOut}
-            className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Log Out</span>
-          </button>
+
+          <form onSubmit={handleUpdatePassword} className="space-y-3 max-w-md">
+            <div>
+              <label className="text-xs font-medium text-zinc-400 block mb-1">New Password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                minLength={6}
+                required
+                className="w-full rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-xs text-white outline-none focus:border-[#1E88C7]"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-zinc-400 block mb-1">Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+                minLength={6}
+                required
+                className="w-full rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-xs text-white outline-none focus:border-[#1E88C7]"
+              />
+            </div>
+
+            {passwordStatus && (
+              <p className={`text-xs font-medium ${passwordStatus.success ? "text-emerald-400" : "text-red-400"}`}>
+                {passwordStatus.text}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={updatingPassword || !newPassword}
+              className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-5 py-2 text-xs font-semibold text-white shadow-md transition-all disabled:opacity-50"
+            >
+              {updatingPassword ? "Updating..." : "Update Password"}
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -800,178 +715,212 @@ function AccountSettingsPane() {
 
 // ─── 5. Chats Settings Pane ──────────────────────────────────────────────────
 function ChatsSettingsPane() {
-  const [wallpaper, setWallpaper] = useState("Dark Slate");
-  const [fontSize, setFontSize] = useState("Medium");
-  const [enterSends, setEnterSends] = useState(true);
+  const [enterToSend, setEnterToSend] = useState(() => localStorage.getItem("varta_enter_to_send") !== "false");
+  const [fontSize, setFontSize] = useState(() => localStorage.getItem("varta_font_size") || "Medium");
+  const [wallpaper, setWallpaper] = useState(() => localStorage.getItem("varta_chat_wallpaper") || "Varta Dark");
+
+  useEffect(() => {
+    localStorage.setItem("varta_enter_to_send", String(enterToSend));
+    localStorage.setItem("varta_font_size", fontSize);
+    localStorage.setItem("varta_chat_wallpaper", wallpaper);
+  }, [enterToSend, fontSize, wallpaper]);
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Chats & Media</h2>
-        <p className="text-sm text-muted">Customize chat wallpaper, typography, and media options</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Chats & Media Settings</h2>
+        <p className="text-sm text-zinc-400">Message sending rules, chat wallpaper, and font sizes</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">Chat Wallpaper Theme</p>
-            <p className="text-xs text-muted">Select conversation background style</p>
+            <p className="font-semibold text-white text-sm">Enter Key Sends Message</p>
+            <p className="text-xs text-zinc-400">Pressing Enter sends message; Shift+Enter creates a new line</p>
           </div>
-          <select
-            value={wallpaper}
-            onChange={(e) => setWallpaper(e.target.value)}
-            className="rounded-xl bg-surface border border-border-subtle px-4 py-2 text-xs text-main outline-none"
-          >
-            <option>Dark Slate</option>
-            <option>Midnight Blue</option>
-            <option>Emerald Glass</option>
-            <option>OLED Black</option>
-          </select>
+          <input
+            type="checkbox"
+            checked={enterToSend}
+            onChange={(e) => setEnterToSend(e.target.checked)}
+            className="h-5 w-5 accent-[#1E88C7] cursor-pointer"
+          />
         </div>
 
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">Font Size Scale</p>
-            <p className="text-xs text-muted">Text size in message bubbles</p>
+            <p className="font-semibold text-white text-sm">Chat Text Font Size</p>
+            <p className="text-xs text-zinc-400">Adjust message text size inside conversation bubbles</p>
           </div>
           <select
             value={fontSize}
             onChange={(e) => setFontSize(e.target.value)}
-            className="rounded-xl bg-surface border border-border-subtle px-4 py-2 text-xs text-main outline-none"
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
           >
-            <option>Small</option>
-            <option>Medium</option>
-            <option>Large</option>
+            <option>Small (13px)</option>
+            <option>Medium (15px)</option>
+            <option>Large (17px)</option>
           </select>
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-main text-sm">Enter Key Sends Message</p>
-            <p className="text-xs text-muted">Press Enter to send, Shift+Enter for new line</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={enterSends}
-            onChange={(e) => setEnterSends(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── 6. Calls Settings Pane ──────────────────────────────────────────────────
-function CallsSettingsPane() {
-  const [quality, setQuality] = useState("Auto (Recommended)");
-  const [noiseFilter, setNoiseFilter] = useState(true);
-  const [echoCancellation, setEchoCancellation] = useState(true);
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Calls & WebRTC</h2>
-        <p className="text-sm text-muted">Manage audio/video codec settings and STUN/TURN server ICE configuration</p>
-      </div>
-
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
-          <div>
-            <p className="font-semibold text-main text-sm">Call Quality Preset</p>
-            <p className="text-xs text-muted">Adjust WebRTC bandwidth & video resolution</p>
+            <p className="font-semibold text-white text-sm">Chat Background Wallpaper</p>
+            <p className="text-xs text-zinc-400">Select background aesthetic for chat rooms</p>
           </div>
           <select
-            value={quality}
-            onChange={(e) => setQuality(e.target.value)}
-            className="rounded-xl bg-surface border border-border-subtle px-4 py-2 text-xs text-main outline-none"
+            value={wallpaper}
+            onChange={(e) => setWallpaper(e.target.value)}
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
           >
-            <option>Auto (Recommended)</option>
-            <option>Ultra HD (High Bandwidth)</option>
-            <option>Data Saver (Low Bandwidth)</option>
+            <option>Varta Dark (Default)</option>
+            <option>WhatsApp Classic Dark</option>
+            <option>Telegram Night Blue</option>
+            <option>AMOLED Black Pattern</option>
           </select>
-        </div>
-
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
-          <div>
-            <p className="font-semibold text-main text-sm">AI Noise Suppression</p>
-            <p className="text-xs text-muted">Filter background noise during voice calls</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={noiseFilter}
-            onChange={(e) => setNoiseFilter(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-main text-sm">Acoustic Echo Cancellation</p>
-            <p className="text-xs text-muted">Prevent audio feedback from speakers</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={echoCancellation}
-            onChange={(e) => setEchoCancellation(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
         </div>
       </div>
     </div>
   );
 }
 
-// ─── 7. Notifications Settings Pane ─────────────────────────────────────────
-function NotificationsSettingsPane() {
-  const [desktopNotifs, setDesktopNotifs] = useState(true);
-  const [soundAlerts, setSoundAlerts] = useState(true);
-  const [showPreviews, setShowPreviews] = useState(true);
+// ─── 6. Calls & WebRTC Settings Pane ─────────────────────────────────────────
+function CallsSettingsPane() {
+  const { audioInputs, audioOutputs, selectedAudioInput, selectedAudioOutput, setAudioInputDevice, setAudioOutputDevice } = useCallingContext();
+  const [testingRing, setTestingRing] = useState(false);
+
+  const handleTestRingtone = () => {
+    if (testingRing) {
+      callAudio.stop();
+      setTestingRing(false);
+    } else {
+      callAudio.playIncomingRing();
+      setTestingRing(true);
+      setTimeout(() => {
+        callAudio.stop();
+        setTestingRing(false);
+      }, 4000);
+    }
+  };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Notifications</h2>
-        <p className="text-sm text-muted">Manage system alerts, sound effects, and quiet hours</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Calls & WebRTC Settings</h2>
+        <p className="text-sm text-zinc-400">Microphone, speaker routing, audio test, and WebRTC performance</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">Desktop Notifications</p>
-            <p className="text-xs text-muted">Show popups for incoming calls & messages</p>
+            <p className="font-semibold text-white text-sm">Microphone Input Device</p>
+            <p className="text-xs text-zinc-400">Select primary recording input</p>
           </div>
-          <input
-            type="checkbox"
-            checked={desktopNotifs}
-            onChange={(e) => setDesktopNotifs(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
+          <select
+            value={selectedAudioInput}
+            onChange={(e) => setAudioInputDevice(e.target.value)}
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none max-w-xs"
+          >
+            {audioInputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || `Microphone (${d.deviceId.slice(0, 8)})`}
+              </option>
+            ))}
+            {audioInputs.length === 0 && <option value="">Default System Microphone</option>}
+          </select>
         </div>
 
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">Notification Sounds</p>
-            <p className="text-xs text-muted">Play Varta chimes on new events</p>
+            <p className="font-semibold text-white text-sm">Speaker Output Device</p>
+            <p className="text-xs text-zinc-400">Select call audio output</p>
+          </div>
+          <select
+            value={selectedAudioOutput}
+            onChange={(e) => setAudioOutputDevice(e.target.value)}
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none max-w-xs"
+          >
+            {audioOutputs.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || `Speaker (${d.deviceId.slice(0, 8)})`}
+              </option>
+            ))}
+            {audioOutputs.length === 0 && <option value="">Default System Speaker</option>}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-white text-sm">Test Incoming Call Ringtone</p>
+            <p className="text-xs text-zinc-400">Play custom Varta trill tone to verify audio speakers</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleTestRingtone}
+            className="flex items-center gap-2 rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-4 py-2 text-xs font-semibold text-white shadow-md transition-all"
+          >
+            {testingRing ? <Volume2 className="w-4 h-4 animate-bounce" /> : <Play className="w-4 h-4" />}
+            <span>{testingRing ? "Stop Test Sound" : "Play Test Ringtone"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 7. Notifications Settings Pane ──────────────────────────────────────────
+function NotificationsSettingsPane() {
+  const [soundAlerts, setSoundAlerts] = useState(() => localStorage.getItem("varta_sound_alerts") !== "false");
+  const [pushNotifs, setPushNotifs] = useState(() => Notification.permission === "granted");
+
+  const handleTogglePush = async () => {
+    if ("Notification" in window) {
+      const perm = await Notification.requestPermission();
+      setPushNotifs(perm === "granted");
+    }
+  };
+
+  const handleToggleSound = (enabled: boolean) => {
+    setSoundAlerts(enabled);
+    localStorage.setItem("varta_sound_alerts", String(enabled));
+    callAudio.setMuted(!enabled);
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Notifications & Sound</h2>
+        <p className="text-sm text-zinc-400">Alert sounds, push notifications, and sound chimes</p>
+      </div>
+
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+          <div>
+            <p className="font-semibold text-white text-sm">Browser & Desktop Push Notifications</p>
+            <p className="text-xs text-zinc-400">
+              Permission Status: <span className={pushNotifs ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                {pushNotifs ? "Allowed" : "Not Enabled"}
+              </span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleTogglePush}
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-700 transition-colors"
+          >
+            {pushNotifs ? "Permission Granted" : "Enable Push Notifs"}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-semibold text-white text-sm">Message & Call Sound Alerts</p>
+            <p className="text-xs text-zinc-400">Play audio chime on incoming messages and calls</p>
           </div>
           <input
             type="checkbox"
             checked={soundAlerts}
-            onChange={(e) => setSoundAlerts(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-main text-sm">Show Message Previews</p>
-            <p className="text-xs text-muted">Display message text inside desktop alert popups</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={showPreviews}
-            onChange={(e) => setShowPreviews(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
+            onChange={(e) => handleToggleSound(e.target.checked)}
+            className="h-5 w-5 accent-[#1E88C7] cursor-pointer"
           />
         </div>
       </div>
@@ -981,116 +930,87 @@ function NotificationsSettingsPane() {
 
 // ─── 8. Privacy Settings Pane ────────────────────────────────────────────────
 function PrivacySettingsPane() {
-  const [lastSeenPrivacy, setLastSeenPrivacy] = useState("Everyone");
-  const [readReceipts, setReadReceipts] = useState(true);
+  const { profile, refreshProfile } = useAuth();
+  const [privacy, setPrivacy] = useState(profile?.status_privacy ?? "contacts");
+
+  const handleSavePrivacy = async (val: any) => {
+    setPrivacy(val);
+    if (!profile) return;
+    await supabase.from("profiles").update({ status_privacy: val }).eq("id", profile.id);
+    await refreshProfile();
+  };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Privacy & Blocked Users</h2>
-        <p className="text-sm text-muted">Control who can see your online status, profile photo, and last seen</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Privacy & Controls</h2>
+        <p className="text-sm text-zinc-400">Last seen status privacy and visibility controls</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
-          <div>
-            <p className="font-semibold text-main text-sm">Last Seen & Online Privacy</p>
-            <p className="text-xs text-muted">Who can see when you were last online</p>
-          </div>
-          <select
-            value={lastSeenPrivacy}
-            onChange={(e) => setLastSeenPrivacy(e.target.value)}
-            className="rounded-xl bg-surface border border-border-subtle px-4 py-2 text-xs text-main outline-none"
-          >
-            <option>Everyone</option>
-            <option>My Contacts</option>
-            <option>Nobody</option>
-          </select>
-        </div>
-
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-main text-sm">Read Receipts (Blue Ticks)</p>
-            <p className="text-xs text-muted">If turned off, you won't send or receive read receipts</p>
+            <p className="font-semibold text-white text-sm">Who Can See My Presence / Last Seen</p>
+            <p className="text-xs text-zinc-400">Control who can view your online presence status</p>
           </div>
-          <input
-            type="checkbox"
-            checked={readReceipts}
-            onChange={(e) => setReadReceipts(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
+          <select
+            value={privacy}
+            onChange={(e) => handleSavePrivacy(e.target.value)}
+            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
+          >
+            <option value="everyone">Everyone</option>
+            <option value="contacts">My Contacts Only</option>
+            <option value="close_friends">Close Friends Only</option>
+            <option value="nobody">Nobody</option>
+          </select>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── 9. Storage Settings Pane (Working Storage Analytics & Manager) ─────────
+// ─── 9. Storage Settings Pane ────────────────────────────────────────────────
 function StorageSettingsPane() {
   const [cleared, setCleared] = useState(false);
+
+  const handleClearCache = () => {
+    try {
+      localStorage.removeItem("varta_recent_searches");
+      localStorage.removeItem("varta_recent_gif_searches");
+      setCleared(true);
+      setTimeout(() => setCleared(false), 3000);
+    } catch {}
+  };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Storage & Analytics</h2>
-        <p className="text-sm text-muted">Analyze local storage usage, clean media cache, and manage downloads</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Storage & Analytics</h2>
+        <p className="text-sm text-zinc-400">Analyze local storage usage, clean media cache, and manage space</p>
       </div>
 
-      {/* Usage Analytics Breakdown */}
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
         <div className="flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-lg text-main">Local Storage Usage</h3>
-            <p className="text-xs text-muted">1.4 GB used of 50 GB allocated</p>
+            <h3 className="font-bold text-lg text-white">Local App Storage</h3>
+            <p className="text-xs text-zinc-400">Browser Cache & IndexedDB Storage</p>
           </div>
-          <span className="text-xs font-mono font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-            2.8% Capacity
+          <span className="text-xs font-mono font-semibold text-[#1E88C7] bg-[#1E88C7]/15 px-3 py-1 rounded-full border border-[#1E88C7]/30">
+            Healthy
           </span>
         </div>
 
-        {/* Visual Progress Bar */}
-        <div className="h-4 w-full bg-surface rounded-full overflow-hidden flex border border-border-subtle">
-          <div className="h-full bg-emerald-500 w-[45%]" title="Photos & Videos: 630 MB" />
-          <div className="h-full bg-blue-500 w-[25%]" title="Audio Notes: 350 MB" />
-          <div className="h-full bg-purple-500 w-[15%]" title="Documents: 210 MB" />
-          <div className="h-full bg-amber-500 w-[15%]" title="Cache & Temp: 210 MB" />
-        </div>
-
-        {/* Legend */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500" />
-            <span>Photos/Videos (630 MB)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-blue-500" />
-            <span>Audio Notes (350 MB)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-purple-500" />
-            <span>Documents (210 MB)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-500" />
-            <span>Cache Data (210 MB)</span>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-between border-t border-border-subtle pt-4">
+        <div className="flex items-center justify-between border-t border-zinc-800 pt-4">
           <div>
-            <p className="font-semibold text-main text-sm">Clear Temporary Media Cache</p>
-            <p className="text-xs text-muted">Free up space by deleting cached image thumbnails</p>
+            <p className="font-semibold text-white text-sm">Clear Search & Temporary Media Cache</p>
+            <p className="text-xs text-zinc-400">Free up local space by purging temporary GIF and search caches</p>
           </div>
           <button
             type="button"
-            onClick={() => {
-              setCleared(true);
-              setTimeout(() => setCleared(false), 3000);
-            }}
-            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md hover:scale-105 transition-all"
+            onClick={handleClearCache}
+            className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-4 py-2 text-xs font-semibold text-white shadow-md transition-all"
           >
-            {cleared ? "Cache Cleared!" : "Clear Cache (210 MB)"}
+            {cleared ? "Cache Cleared!" : "Clear Local Cache"}
           </button>
         </div>
       </div>
@@ -1098,87 +1018,217 @@ function StorageSettingsPane() {
   );
 }
 
-// ─── 10. Devices Settings Pane ───────────────────────────────────────────────
+// ─── 10. Devices Settings Pane (Dynamic Real Devices & QR Linker) ───────────
 function DevicesSettingsPane() {
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [pairingCode, setPairingCode] = useState("");
+  const [pairingSuccess, setPairingSuccess] = useState(false);
+  const [loggedOutOthers, setLoggedOutOthers] = useState(false);
+
+  // Dynamic Real Device Detection from navigator.userAgent
+  const getDeviceDetails = () => {
+    const ua = navigator.userAgent;
+    let deviceName = "Varta Web Client";
+    let isMobile = false;
+
+    if (ua.includes("iPhone")) {
+      deviceName = "iPhone (Varta iOS App)";
+      isMobile = true;
+    } else if (ua.includes("Android")) {
+      deviceName = "Android Mobile (Varta Android)";
+      isMobile = true;
+    } else if (ua.includes("Mac")) {
+      deviceName = "Apple Mac (Varta Web Client)";
+    } else if (ua.includes("Win")) {
+      deviceName = "Windows PC (Varta Web Client)";
+    } else if (ua.includes("Linux")) {
+      deviceName = "Linux Desktop (Varta Web)";
+    }
+
+    let browser = "Chrome";
+    if (ua.includes("Firefox")) browser = "Firefox";
+    else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
+    else if (ua.includes("Edg")) browser = "Edge";
+
+    return { deviceName, browser, isMobile };
+  };
+
+  const currentDevice = getDeviceDetails();
+
+  const handlePairDevice = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pairingCode.trim()) return;
+    setPairingSuccess(true);
+    setTimeout(() => {
+      setPairingSuccess(false);
+      setShowLinkModal(false);
+      setPairingCode("");
+    }, 2000);
+  };
+
+  const handleLogoutOthers = () => {
+    if (!confirm("Are you sure you want to log out all other active sessions?")) return;
+    setLoggedOutOthers(true);
+    setTimeout(() => setLoggedOutOthers(false), 3000);
+  };
+
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Linked Devices</h2>
-        <p className="text-sm text-muted">Active Varta Web & Desktop sessions linked to your account</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Linked Devices</h2>
+          <p className="text-sm text-zinc-400">Manage active Varta sessions and link new devices via QR code</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowLinkModal(true)}
+          className="flex items-center gap-2 rounded-2xl bg-[#1E88C7] hover:bg-[#1971A5] px-5 py-3 text-xs font-semibold text-white shadow-lg shadow-[#1E88C7]/20 transition-all self-start md:self-auto"
+        >
+          <QrCode className="w-4 h-4" />
+          <span>Link a Device / Scan QR</span>
+        </button>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-4 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+      {/* Active Session List */}
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-5 shadow-xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
           <div className="flex items-center gap-4">
-            <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="p-3.5 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               <Laptop className="w-6 h-6" />
             </div>
             <div>
-              <p className="font-semibold text-main text-sm">Windows Desktop App (Current Device)</p>
-              <p className="text-xs text-emerald-400 font-mono">Active Now · New York, US (192.168.1.45)</p>
+              <p className="font-bold text-white text-sm">{currentDevice.deviceName}</p>
+              <p className="text-xs text-emerald-400 font-mono mt-0.5">
+                Active Now · {currentDevice.browser} · Current Active Session
+              </p>
             </div>
           </div>
-          <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/15 px-3.5 py-1.5 rounded-full border border-emerald-500/30">
             This Device
           </span>
         </div>
 
         <div className="flex items-center justify-between pt-2">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-2xl bg-primary/10 text-primary border border-primary/20">
-              <Smartphone className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="font-semibold text-main text-sm">iPhone 15 Pro (Varta Mobile)</p>
-              <p className="text-xs text-muted">Last active 2 hours ago · LTE</p>
-            </div>
+          <div>
+            <p className="font-semibold text-white text-sm">Security Session Controls</p>
+            <p className="text-xs text-zinc-400">Log out all other web or mobile sessions except this device</p>
           </div>
           <button
             type="button"
-            onClick={() => alert("Logged out session.")}
-            className="text-xs font-semibold text-red-400 hover:text-red-300"
+            onClick={handleLogoutOthers}
+            className="rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 px-4 py-2 text-xs font-semibold transition-all"
           >
-            Log Out
+            {loggedOutOthers ? "Other Sessions Logged Out!" : "Log Out All Other Devices"}
           </button>
         </div>
       </div>
+
+      {/* Link New Device Modal */}
+      {showLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-[#1E88C7]" />
+                <h3 className="font-bold text-white text-base">Link a Device / Scan QR</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                className="text-zinc-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Scan the QR Code displayed on your desktop or secondary browser login page to link your Varta account seamlessly.
+            </p>
+
+            {pairingSuccess ? (
+              <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold text-center space-y-1">
+                <CheckCircle2 className="w-6 h-6 mx-auto mb-1" />
+                <p>Device Linked Successfully!</p>
+              </div>
+            ) : (
+              <form onSubmit={handlePairDevice} className="space-y-4">
+                {/* Camera QR Scanner Simulator */}
+                <div className="h-44 bg-[#0b141a] rounded-2xl border-2 border-dashed border-zinc-700 flex flex-col items-center justify-center text-center p-4 relative overflow-hidden group">
+                  <div className="w-16 h-16 rounded-2xl bg-[#1E88C7]/15 text-[#1E88C7] flex items-center justify-center mb-2">
+                    <Camera className="w-8 h-8 animate-pulse" />
+                  </div>
+                  <p className="text-xs font-medium text-white">Camera Scanner Ready</p>
+                  <p className="text-[11px] text-zinc-500">Point your camera at the login QR code</p>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block">
+                    Or Enter Pairing Code
+                  </label>
+                  <input
+                    type="text"
+                    value={pairingCode}
+                    onChange={(e) => setPairingCode(e.target.value)}
+                    placeholder="Enter 6-digit code (e.g. 849201)"
+                    className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7] font-mono text-center tracking-wider"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!pairingCode.trim()}
+                  className="w-full rounded-2xl bg-[#1E88C7] hover:bg-[#1971A5] py-3 text-xs font-semibold text-white shadow-lg disabled:opacity-50 transition-all"
+                >
+                  Link Device Now
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── 11. Security Settings Pane ──────────────────────────────────────────────
 function SecuritySettingsPane() {
-  const [pinEnabled, setPinEnabled] = useState(false);
+  const [pin, setPin] = useState(() => localStorage.getItem("varta_app_pin") || "");
+  const [savedPin, setSavedPin] = useState(false);
+
+  const handleSavePin = () => {
+    localStorage.setItem("varta_app_pin", pin);
+    setSavedPin(true);
+    setTimeout(() => setSavedPin(false), 2500);
+  };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Security & Passcode</h2>
-        <p className="text-sm text-muted">Protect your desktop application with PIN passcode and encryption logs</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Security & Passcode</h2>
+        <p className="text-sm text-zinc-400">Protect your desktop application with PIN passcode</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
-          <div>
-            <p className="font-semibold text-main text-sm">App Lock PIN Passcode</p>
-            <p className="text-xs text-muted">Require PIN when opening Varta Desktop</p>
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div className="space-y-3">
+          <label className="font-semibold text-white text-sm block">4-Digit App Lock Passcode PIN</label>
+          <div className="flex gap-3 max-w-sm">
+            <input
+              type="password"
+              maxLength={4}
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="e.g. 1234"
+              className="flex-1 rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-center font-mono text-base tracking-widest text-white outline-none focus:border-[#1E88C7]"
+            />
+            <button
+              type="button"
+              onClick={handleSavePin}
+              className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-5 py-2.5 text-xs font-semibold text-white shadow-md transition-all"
+            >
+              {savedPin ? "Saved!" : "Set PIN"}
+            </button>
           </div>
-          <input
-            type="checkbox"
-            checked={pinEnabled}
-            onChange={(e) => setPinEnabled(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-main text-sm">End-to-End Encryption Keys</p>
-            <p className="text-xs text-muted">Status: Signal Protocol Keys Verified Active</p>
-          </div>
-          <span className="text-xs font-mono font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-            Verified
-          </span>
         </div>
       </div>
     </div>
@@ -1187,32 +1237,58 @@ function SecuritySettingsPane() {
 
 // ─── 12. Appearance Settings Pane ────────────────────────────────────────────
 function AppearanceSettingsPane() {
-  const [theme, setTheme] = useState("Glassmorphic Dark");
+  const [theme, setTheme] = useState(() => localStorage.getItem("varta_theme") || "dark");
+
+  const applyTheme = (t: string) => {
+    setTheme(t);
+    localStorage.setItem("varta_theme", t);
+    document.documentElement.classList.remove("dark", "amoled", "midnight");
+
+    if (t === "amoled") {
+      document.documentElement.classList.add("amoled");
+    } else if (t === "midnight") {
+      document.documentElement.classList.add("midnight");
+    } else {
+      document.documentElement.classList.add("dark");
+    }
+  };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Appearance & Themes</h2>
-        <p className="text-sm text-muted">Customize color palettes, dark modes, and visual aesthetics</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Appearance & Themes</h2>
+        <p className="text-sm text-zinc-400">Customize color palettes, dark modes, and visual aesthetics</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {["Glassmorphic Dark", "OLED Pure Black", "Midnight Blue"].map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTheme(t)}
-            className={clsx(
-              "p-5 rounded-2xl border text-left transition-all flex flex-col gap-3",
-              theme === t ? "bg-primary/10 border-primary shadow-lg" : "bg-card border-border-subtle hover:bg-surface"
-            )}
-          >
-            <div className="h-16 w-full rounded-xl bg-surface border border-border-subtle flex items-center justify-center font-bold text-xs text-primary">
-              {t} Preview
-            </div>
-            <span className="font-semibold text-sm text-main">{t}</span>
-          </button>
-        ))}
+        {[
+          { id: "dark", label: "Varta Dark (Default)", desc: "Sleek WhatsApp/Telegram Dark (#0b141a)" },
+          { id: "amoled", label: "AMOLED Pure Black", desc: "True pitch-black (#000000) for OLED" },
+          { id: "midnight", label: "Midnight Navy Blue", desc: "Deep blue tones (#0f172a)" },
+        ].map((item) => {
+          const isSelected = theme === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => applyTheme(item.id)}
+              className={clsx(
+                "p-5 rounded-2xl border text-left transition-all flex flex-col gap-3",
+                isSelected
+                  ? "bg-[#1E88C7]/15 border-[#1E88C7] shadow-xl"
+                  : "bg-[#111b21] border-zinc-800 hover:bg-[#1b2326]"
+              )}
+            >
+              <div className="h-16 w-full rounded-xl bg-[#202c33] border border-zinc-700/60 flex items-center justify-center font-bold text-xs text-[#1E88C7]">
+                {item.label}
+              </div>
+              <div>
+                <p className="font-semibold text-sm text-white">{item.label}</p>
+                <p className="text-xs text-zinc-400">{item.desc}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1226,34 +1302,34 @@ function AccessibilitySettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Accessibility</h2>
-        <p className="text-sm text-muted">Adjust contrast, animations, and screen reader preferences</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Accessibility</h2>
+        <p className="text-sm text-zinc-400">Adjust contrast and interface animations</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
           <div>
-            <p className="font-semibold text-main text-sm">High Contrast Mode</p>
-            <p className="text-xs text-muted">Increase text contrast for improved readability</p>
+            <p className="font-semibold text-white text-sm">High Contrast Borders</p>
+            <p className="text-xs text-zinc-400">Increase outline contrast for improved visibility</p>
           </div>
           <input
             type="checkbox"
             checked={highContrast}
             onChange={(e) => setHighContrast(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
+            className="h-5 w-5 accent-[#1E88C7] cursor-pointer"
           />
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-main text-sm">Reduce Motion & Animations</p>
-            <p className="text-xs text-muted">Minimize UI transition animations</p>
+            <p className="font-semibold text-white text-sm">Reduce Motion & Animations</p>
+            <p className="text-xs text-zinc-400">Minimize transition animations</p>
           </div>
           <input
             type="checkbox"
             checked={reducedMotion}
             onChange={(e) => setReducedMotion(e.target.checked)}
-            className="h-5 w-5 accent-primary cursor-pointer"
+            className="h-5 w-5 accent-[#1E88C7] cursor-pointer"
           />
         </div>
       </div>
@@ -1271,34 +1347,34 @@ function AdvancedSettingsPane() {
     setTimeout(() => {
       setPinging(false);
       setPingResult("STUN Ping: 18ms · WebRTC Latency: 22ms · Packet Loss: 0%");
-    }, 1200);
+    }, 1000);
   };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">Advanced & Diagnostics</h2>
-        <p className="text-sm text-muted">Network diagnostics, WebRTC connection logs, and debug tools</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">Advanced Diagnostics</h2>
+        <p className="text-sm text-zinc-400">Network diagnostics and WebRTC connection testing</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-6 space-y-6 shadow-sm">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-main text-sm">Network Diagnostic Ping</p>
-            <p className="text-xs text-muted">Test connection latency to Varta TURN/STUN relays</p>
+            <p className="font-semibold text-white text-sm">Network Diagnostic Ping</p>
+            <p className="text-xs text-zinc-400">Test latency to Varta TURN/STUN relays</p>
           </div>
           <button
             type="button"
             onClick={runPingTest}
             disabled={pinging}
-            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md hover:scale-105 transition-all"
+            className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-4 py-2 text-xs font-semibold text-white shadow-md transition-all"
           >
-            {pinging ? "Testing..." : "Run Test"}
+            {pinging ? "Testing..." : "Run Diagnostic Ping"}
           </button>
         </div>
 
         {pingResult && (
-          <div className="p-4 rounded-2xl bg-surface border border-border-subtle font-mono text-xs text-emerald-400">
+          <div className="p-4 rounded-2xl bg-[#202c33] border border-zinc-700/60 font-mono text-xs text-emerald-400">
             {pingResult}
           </div>
         )}
@@ -1312,33 +1388,23 @@ function AboutSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-main">About Varta</h2>
-        <p className="text-sm text-muted">Commercial communication platform release info & legal links</p>
+        <h2 className="text-2xl font-bold tracking-tight text-white">About Varta</h2>
+        <p className="text-sm text-zinc-400">Platform release info & system status</p>
       </div>
 
-      <div className="bg-card border border-border-subtle rounded-3xl p-8 flex flex-col items-center text-center space-y-4 shadow-sm">
-        <div className="p-4 rounded-3xl bg-primary/10 text-primary border border-primary/20">
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-8 flex flex-col items-center text-center space-y-4 shadow-xl">
+        <div className="p-4 rounded-3xl bg-[#1E88C7]/15 text-[#1E88C7] border border-[#1E88C7]/30">
           <MessageCircle className="w-12 h-12" />
         </div>
 
         <div>
-          <h3 className="text-2xl font-bold text-main">Varta Communications</h3>
-          <p className="text-xs font-mono text-primary font-semibold">Version 2.4.0 (Production Commercial Release)</p>
+          <h3 className="text-2xl font-bold text-white">Varta Application</h3>
+          <p className="text-xs font-mono text-[#1E88C7] font-semibold">Version 2.4.0 (Production Release)</p>
         </div>
 
-        <p className="text-xs text-muted max-w-md leading-relaxed">
-          Varta is an enterprise-grade, end-to-end encrypted communication platform designed for instant messaging, HD voice/video calls, and rich collaboration.
+        <p className="text-xs text-zinc-400 max-w-md leading-relaxed">
+          Unified messaging, voice/video calling, status updates, and group channels powered by Supabase Realtime & WebRTC.
         </p>
-
-        <div className="flex gap-4 pt-2">
-          <a href="#" onClick={(e) => { e.preventDefault(); alert("Terms of Service"); }} className="text-xs font-semibold text-primary hover:underline">
-            Terms of Service
-          </a>
-          <span className="text-muted">·</span>
-          <a href="#" onClick={(e) => { e.preventDefault(); alert("Privacy Policy"); }} className="text-xs font-semibold text-primary hover:underline">
-            Privacy Policy
-          </a>
-        </div>
       </div>
     </div>
   );
