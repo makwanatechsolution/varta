@@ -328,7 +328,7 @@ export function AppShell() {
       ═══════════════════════════════════════════════════════════════════ */}
       <main
         className={clsx(
-          "flex-1 flex flex-col overflow-hidden",
+          "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden",
           isMobileShowingContent ? "flex" : "hidden md:flex"
         )}
         style={{ backgroundColor: "var(--bg-main)" }}
@@ -363,7 +363,7 @@ export function AppShell() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: location.pathname.startsWith("/chat/") ? 40 : 0 }}
               transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
-              className="flex-1 flex flex-col overflow-hidden will-change-transform"
+              className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden will-change-transform"
             >
               <Outlet />
             </motion.div>

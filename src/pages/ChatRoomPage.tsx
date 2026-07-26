@@ -228,8 +228,8 @@ export function ChatRoomPage() {
 
   return (
     <div
-      className="flex flex-col relative z-0 overflow-hidden"
-      style={{ height: "100dvh", backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
+      className="flex flex-1 min-h-0 min-w-0 flex-col relative z-0 overflow-hidden"
+      style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
     >
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header
@@ -291,7 +291,7 @@ export function ChatRoomPage() {
       <div
         ref={messagesContainerRef}
         className={clsx(
-          "flex-1 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide transition-all",
+          "flex-1 min-h-0 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide transition-all",
           fontSize === "small" && "text-[13px]",
           fontSize === "large" && "text-[17px]",
           (!fontSize || fontSize === "medium") && "text-[15px]"

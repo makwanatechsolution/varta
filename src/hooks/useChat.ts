@@ -158,6 +158,15 @@ export function useMessages(conversationId: string | undefined) {
     if (!conversationId || !user) return;
     load(false);
 
+    let recoveryTimer: number | undefined;
+    const recover = () => {
+      window.clearTimeout(recoveryTimer);
+      // Postgres Changes is carried over Supabase Realtime's WebSocket. A
+      // reconnect can miss an event while the socket is unavailable, so make
+      // one silent read after it is established to close that gap.
+      recoveryTimer = window.setTimeout(() => load(true), 150);
+    };
+
     const channel = supabase
       .channel(`messages:${conversationId}`)
 
@@ -275,9 +284,14 @@ export function useMessages(conversationId: string | undefined) {
         }));
       })
 
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") recover();
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      window.clearTimeout(recoveryTimer);
+      supabase.removeChannel(channel);
+    };
   }, [conversationId, user, load]);
 
   const sendMessage = async (

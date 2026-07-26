@@ -65,17 +65,19 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className={clsx("group relative flex gap-2 items-end mb-2", isOwn ? "flex-row-reverse" : "flex-row")}
+      className={clsx("group relative mb-2", isOwn ? "flex justify-end" : "pl-10")}
     >
       {!isOwn && (
-        <Avatar
-          src={message.sender?.avatar_url}
-          name={message.sender?.display_name ?? "?"}
-          size="sm"
-        />
+        <div className="absolute bottom-0 left-0">
+          <Avatar
+            src={message.sender?.avatar_url}
+            name={message.sender?.display_name ?? "?"}
+            size="sm"
+          />
+        </div>
       )}
 
-      <div className={clsx("max-w-[75%] flex flex-col min-w-0", isOwn ? "items-end ml-auto" : "items-start mr-auto")}>
+      <div className={clsx("max-w-[75%] flex flex-col min-w-0", isOwn ? "items-end" : "items-start")}>
         {/* Reply preview */}
         {message.reply_to_id && (message as Message & { reply_to?: { content: string | null; sender?: { display_name: string } } }).reply_to && (
           <div className={clsx(
