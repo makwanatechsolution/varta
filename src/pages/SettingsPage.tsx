@@ -765,20 +765,21 @@ function GeneralSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">General Settings</h2>
-        <p className="text-sm text-zinc-400">App startup, language, and system integration</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>General Settings</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>App startup, language, and system integration</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">App Language</p>
-            <p className="text-xs text-zinc-400">Select interface language</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>App Language</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select interface language</p>
           </div>
           <select
             value={lang}
             onChange={(e) => setLang(e.target.value)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
+            className="rounded-xl border px-4 py-2 text-xs outline-none"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             <option>English (US)</option>
             <option>Spanish (Español)</option>
@@ -788,10 +789,10 @@ function GeneralSettingsPane() {
           </select>
         </div>
 
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Auto-Start on Boot</p>
-            <p className="text-xs text-zinc-400">Launch Varta automatically when computer starts</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Auto-Start on Boot</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Launch Varta automatically when computer starts</p>
           </div>
           <input
             type="checkbox"
@@ -801,10 +802,10 @@ function GeneralSettingsPane() {
           />
         </div>
 
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Automatic Updates</p>
-            <p className="text-xs text-zinc-400">Keep Varta updated automatically in background</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Automatic Updates</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Keep Varta updated automatically in background</p>
           </div>
           <input
             type="checkbox"
@@ -816,13 +817,14 @@ function GeneralSettingsPane() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Default Opening Tab</p>
-            <p className="text-xs text-zinc-400">Which view to open when app starts</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Default Opening Tab</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Which view to open when app starts</p>
           </div>
           <select
             value={launchTab}
             onChange={(e) => setLaunchTab(e.target.value)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
+            className="rounded-xl border px-4 py-2 text-xs outline-none"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             <option>All Chats</option>
             <option>Calls</option>
@@ -873,32 +875,33 @@ function AccountSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Account & Security</h2>
-        <p className="text-sm text-zinc-400">Manage email credentials, password, and session security</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Account & Security</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Manage email credentials, password, and session security</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             Email Address
           </label>
           <input
             disabled
             value={email}
-            className="w-full rounded-2xl bg-[#202c33]/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-400 outline-none cursor-not-allowed"
+            className="w-full rounded-2xl border px-4 py-3 text-sm outline-none cursor-not-allowed opacity-75"
+            style={{ backgroundColor: "var(--bg-card)", color: "var(--text-muted)", borderColor: "var(--border-subtle)" }}
           />
         </div>
 
         {/* Change / Reset Password Section */}
-        <div className="border-t border-zinc-800 pt-6 space-y-4">
+        <div className="border-t pt-6 space-y-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Change Account Password</p>
-            <p className="text-xs text-zinc-400">Update your account password directly</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Change Account Password</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Update your account password directly</p>
           </div>
 
           <form onSubmit={handleUpdatePassword} className="space-y-3 max-w-md">
             <div>
-              <label className="text-xs font-medium text-zinc-400 block mb-1">New Password</label>
+              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>New Password</label>
               <input
                 type="password"
                 value={newPassword}
@@ -906,25 +909,27 @@ function AccountSettingsPane() {
                 placeholder="At least 6 characters"
                 minLength={6}
                 required
-                className="w-full rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-xs text-white outline-none focus:border-[#1E88C7]"
+                className="w-full rounded-xl border px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-[#1E88C7]/30"
+                style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-zinc-400 block mb-1">Confirm New Password</label>
+              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>Confirm New Password</label>
               <input
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Re-enter new password"
                 minLength={6}
                 required
-                className="w-full rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-xs text-white outline-none focus:border-[#1E88C7]"
+                className="w-full rounded-xl border px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-[#1E88C7]/30"
+                style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
               />
             </div>
 
             {passwordStatus && (
-              <p className={`text-xs font-medium ${passwordStatus.success ? "text-emerald-400" : "text-red-400"}`}>
+              <p className={`text-xs font-medium ${passwordStatus.success ? "text-emerald-500" : "text-red-500"}`}>
                 {passwordStatus.text}
               </p>
             )}
@@ -957,15 +962,15 @@ function ChatsSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Chats & Media Settings</h2>
-        <p className="text-sm text-zinc-400">Message sending rules, chat wallpaper, and font sizes</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Chats & Media Settings</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Message sending rules, chat wallpaper, and font sizes</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Enter Key Sends Message</p>
-            <p className="text-xs text-zinc-400">Pressing Enter sends message; Shift+Enter creates a new line</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Enter Key Sends Message</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Pressing Enter sends message; Shift+Enter creates a new line</p>
           </div>
           <input
             type="checkbox"
@@ -975,15 +980,16 @@ function ChatsSettingsPane() {
           />
         </div>
 
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Chat Text Font Size</p>
-            <p className="text-xs text-zinc-400">Adjust message text size inside conversation bubbles</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Chat Text Font Size</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Adjust message text size inside conversation bubbles</p>
           </div>
           <select
             value={fontSize}
             onChange={(e) => setFontSize(e.target.value as any)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
+            className="rounded-xl border px-4 py-2 text-xs outline-none"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             <option value="small">Small (13px)</option>
             <option value="medium">Medium (15px)</option>
@@ -993,13 +999,14 @@ function ChatsSettingsPane() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Chat Background Wallpaper</p>
-            <p className="text-xs text-zinc-400">Select background aesthetic for chat rooms</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Chat Background Wallpaper</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select background aesthetic for chat rooms</p>
           </div>
           <select
             value={chatWallpaper}
             onChange={(e) => setChatWallpaper(e.target.value as any)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
+            className="rounded-xl border px-4 py-2 text-xs outline-none"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             <option value="varta_dark">Varta Dark (Default)</option>
             <option value="whatsapp_dark">WhatsApp Classic Dark Pattern</option>
@@ -1036,20 +1043,21 @@ function CallsSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Calls & WebRTC Settings</h2>
-        <p className="text-sm text-zinc-400">Microphone, speaker routing, audio test, and WebRTC performance</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Calls & WebRTC Settings</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Microphone, speaker routing, audio test, and WebRTC performance</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Microphone Input Device</p>
-            <p className="text-xs text-zinc-400">Select primary recording input</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Microphone Input Device</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select primary recording input</p>
           </div>
           <select
             value={selectedAudioInput}
             onChange={(e) => setAudioInputDevice(e.target.value)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none max-w-xs"
+            className="rounded-xl border px-4 py-2 text-xs outline-none max-w-xs"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             {audioInputs.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
@@ -1060,15 +1068,16 @@ function CallsSettingsPane() {
           </select>
         </div>
 
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Speaker Output Device</p>
-            <p className="text-xs text-zinc-400">Select call audio output</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Speaker Output Device</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select call audio output</p>
           </div>
           <select
             value={selectedAudioOutput}
             onChange={(e) => setAudioOutputDevice(e.target.value)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none max-w-xs"
+            className="rounded-xl border px-4 py-2 text-xs outline-none max-w-xs"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             {audioOutputs.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
@@ -1081,8 +1090,8 @@ function CallsSettingsPane() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Test Incoming Call Ringtone</p>
-            <p className="text-xs text-zinc-400">Play custom Varta trill tone to verify audio speakers</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Test Incoming Call Ringtone</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Play custom Varta trill tone to verify audio speakers</p>
           </div>
           <button
             type="button"
@@ -1119,16 +1128,16 @@ function NotificationsSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Notifications & Sound</h2>
-        <p className="text-sm text-zinc-400">Alert sounds, push notifications, and sound chimes</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Notifications & Sound</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Alert sounds, push notifications, and sound chimes</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">Browser & Desktop Push Notifications</p>
-            <p className="text-xs text-zinc-400">
-              Permission Status: <span className={pushNotifs ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Browser & Desktop Push Notifications</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Permission Status: <span className={pushNotifs ? "text-emerald-500 font-bold" : "text-amber-500 font-bold"}>
                 {pushNotifs ? "Allowed" : "Not Enabled"}
               </span>
             </p>
@@ -1136,7 +1145,8 @@ function NotificationsSettingsPane() {
           <button
             type="button"
             onClick={handleTogglePush}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-700 transition-colors"
+            className="rounded-xl border px-4 py-2 text-xs font-semibold hover:opacity-80 transition-colors"
+            style={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             {pushNotifs ? "Permission Granted" : "Enable Push Notifs"}
           </button>
@@ -1144,8 +1154,8 @@ function NotificationsSettingsPane() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Message & Call Sound Alerts</p>
-            <p className="text-xs text-zinc-400">Play audio chime on incoming messages and calls</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Message & Call Sound Alerts</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Play audio chime on incoming messages and calls</p>
           </div>
           <input
             type="checkbox"
@@ -1174,20 +1184,21 @@ function PrivacySettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Privacy & Controls</h2>
-        <p className="text-sm text-zinc-400">Last seen status privacy and visibility controls</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Privacy & Controls</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Last seen status privacy and visibility controls</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Who Can See My Presence / Last Seen</p>
-            <p className="text-xs text-zinc-400">Control who can view your online presence status</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Who Can See My Presence / Last Seen</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Control who can view your online presence status</p>
           </div>
           <select
             value={privacy}
             onChange={(e) => handleSavePrivacy(e.target.value)}
-            className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
+            className="rounded-xl border px-4 py-2 text-xs outline-none"
+            style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
             <option value="everyone">Everyone</option>
             <option value="contacts">My Contacts Only</option>
@@ -1216,15 +1227,15 @@ function StorageSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Storage & Analytics</h2>
-        <p className="text-sm text-zinc-400">Analyze local storage usage, clean media cache, and manage space</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Storage & Analytics</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Analyze local storage usage, clean media cache, and manage space</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
         <div className="flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-lg text-white">Local App Storage</h3>
-            <p className="text-xs text-zinc-400">Browser Cache & IndexedDB Storage</p>
+            <h3 className="font-bold text-lg" style={{ color: "var(--text-main)" }}>Local App Storage</h3>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Browser Cache & IndexedDB Storage</p>
           </div>
           <span className="text-xs font-mono font-semibold text-[#1E88C7] bg-[#1E88C7]/15 px-3 py-1 rounded-full border border-[#1E88C7]/30">
             Healthy
@@ -1731,9 +1742,9 @@ function AppearanceSettingsPane() {
       </div>
 
       {/* 3. Live Interactive Theme Preview Card */}
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-4 shadow-xl">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider">Live Aesthetic Preview</h3>
-        <div className="p-6 rounded-2xl border border-zinc-800 bg-[#0b141a] flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="border rounded-3xl p-6 space-y-4 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-main)" }}>Live Aesthetic Preview</h3>
+        <div className="p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
           <div className="flex items-center gap-3">
             <div
               className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md"
@@ -1742,8 +1753,8 @@ function AppearanceSettingsPane() {
               VT
             </div>
             <div>
-              <p className="font-semibold text-sm text-white">Varta Live Theme</p>
-              <p className="text-xs text-zinc-400">Active Theme: <span className="text-emerald-400 font-bold uppercase">{resolvedTheme}</span> ({theme})</p>
+              <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Varta Live Theme</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Active Theme: <span className="text-emerald-500 font-bold uppercase">{resolvedTheme}</span> ({theme})</p>
             </div>
           </div>
 
@@ -1776,15 +1787,15 @@ function AccessibilitySettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Accessibility</h2>
-        <p className="text-sm text-zinc-400">Adjust contrast and interface animations</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Accessibility</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Adjust contrast and interface animations</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
-            <p className="font-semibold text-white text-sm">High Contrast Borders</p>
-            <p className="text-xs text-zinc-400">Increase outline contrast for improved visibility</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>High Contrast Borders</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Increase outline contrast for improved visibility</p>
           </div>
           <input
             type="checkbox"
@@ -1796,8 +1807,8 @@ function AccessibilitySettingsPane() {
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Reduce Motion & Animations</p>
-            <p className="text-xs text-zinc-400">Minimize transition animations</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Reduce Motion & Animations</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Minimize transition animations</p>
           </div>
           <input
             type="checkbox"
@@ -1827,15 +1838,15 @@ function AdvancedSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Advanced Diagnostics</h2>
-        <p className="text-sm text-zinc-400">Network diagnostics and WebRTC connection testing</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Advanced Diagnostics</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Network diagnostics and WebRTC connection testing</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-semibold text-white text-sm">Network Diagnostic Ping</p>
-            <p className="text-xs text-zinc-400">Test latency to Varta TURN/STUN relays</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Network Diagnostic Ping</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Test latency to Varta TURN/STUN relays</p>
           </div>
           <button
             type="button"
@@ -1848,7 +1859,7 @@ function AdvancedSettingsPane() {
         </div>
 
         {pingResult && (
-          <div className="p-4 rounded-2xl bg-[#202c33] border border-zinc-700/60 font-mono text-xs text-emerald-400">
+          <div className="p-4 rounded-2xl border font-mono text-xs text-emerald-500" style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)" }}>
             {pingResult}
           </div>
         )}
@@ -1862,23 +1873,29 @@ function AboutSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">About Varta</h2>
-        <p className="text-sm text-zinc-400">Platform release info & system status</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>About Varta</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Platform release info & system status</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-8 flex flex-col items-center text-center space-y-4 shadow-xl">
+      <div className="border rounded-3xl p-8 flex flex-col items-center text-center space-y-4 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
         <div className="p-4 rounded-3xl bg-[#1E88C7]/15 text-[#1E88C7] border border-[#1E88C7]/30">
           <MessageCircle className="w-12 h-12" />
         </div>
 
         <div>
-          <h3 className="text-2xl font-bold text-white">Varta Application</h3>
-          <p className="text-xs font-mono text-[#1E88C7] font-semibold">Version 2.4.0 (Production Release)</p>
+          <h3 className="font-bold text-xl" style={{ color: "var(--text-main)" }}>Varta Enterprise Realtime</h3>
+          <p className="text-xs font-mono font-medium mt-1" style={{ color: "var(--text-muted)" }}>Version 2.4.0 (Build 2026.07)</p>
         </div>
 
-        <p className="text-xs text-zinc-400 max-w-md leading-relaxed">
-          Unified messaging, voice/video calling, status updates, and group channels powered by Supabase Realtime & WebRTC.
+        <p className="text-xs max-w-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
+          Built with React 19, Supabase Realtime, WebRTC, and Tailwind CSS. Modern enterprise communication platform.
         </p>
+
+        <div className="pt-2">
+          <span className="text-xs font-semibold text-emerald-500 bg-emerald-500/15 px-3 py-1 rounded-full border border-emerald-500/30">
+            System Operational · All Services Connected
+          </span>
+        </div>
       </div>
     </div>
   );
