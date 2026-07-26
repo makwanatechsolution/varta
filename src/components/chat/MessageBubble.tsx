@@ -65,7 +65,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className={clsx("group relative mb-2", isOwn ? "flex justify-end" : "pl-10")}
+      className={clsx("group relative min-h-8 shrink-0", isOwn ? "flex justify-end" : "pl-10")}
     >
       {!isOwn && (
         <div className="absolute bottom-0 left-0">
@@ -77,7 +77,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
         </div>
       )}
 
-      <div className={clsx("max-w-[75%] flex flex-col min-w-0", isOwn ? "items-end" : "items-start")}>
+      <div className={clsx("max-w-[min(78%,34rem)] min-w-0 flex flex-col", isOwn ? "items-end" : "items-start")}>
         {/* Reply preview */}
         {message.reply_to_id && (message as Message & { reply_to?: { content: string | null; sender?: { display_name: string } } }).reply_to && (
           <div className={clsx(

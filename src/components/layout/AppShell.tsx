@@ -210,7 +210,7 @@ export function AppShell() {
         {/* Header */}
         <header
           className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0"
-          style={{ paddingTop: "max(12px, env(safe-area-inset-top, 12px))" }}
+          style={{ backgroundColor: "var(--bg-header)", paddingTop: "max(12px, env(safe-area-inset-top, 12px))" }}
         >
           <h1 className="text-[22px] font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Chats</h1>
           <div className="flex gap-1">
@@ -247,7 +247,7 @@ export function AppShell() {
         )}
 
         {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto scrollbar-hide pb-2">
+        <div className="flex-1 overflow-y-auto scrollbar-hide pb-2" style={{ backgroundColor: "var(--bg-sidebar)" }}>
           {loading && (
             <div className="flex justify-center p-8">
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--color-primary)", borderTopColor: "transparent" }} />
@@ -268,12 +268,11 @@ export function AppShell() {
               <Link
                 key={conv.id}
                 to={`/chat/${conv.id}`}
-                className="flex items-center gap-3 px-3.5 py-3 mx-2 rounded-2xl transition-all relative border-l-4"
+                className="flex items-center gap-3 px-4 py-3.5 w-full transition-all relative border-l-4"
                 style={isActive
                   ? {
-                      backgroundColor: "var(--bg-surface)",
+                      backgroundColor: "rgba(30,136,199,0.12)",
                       borderColor: "var(--color-primary)",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                     }
                   : {
                       borderColor: "transparent",
@@ -281,7 +280,7 @@ export function AppShell() {
                     }
                 }
                 onMouseEnter={(e) => {
-                  if (!isActive) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-surface)";
+                  if (!isActive) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0,0,0,0.04)";
                 }}
                 onMouseLeave={(e) => {
                   if (!isActive) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
@@ -359,11 +358,11 @@ export function AppShell() {
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, x: location.pathname.startsWith("/chat/") ? 40 : 0 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: location.pathname.startsWith("/chat/") ? 40 : 0 }}
-              transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
-              className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden will-change-transform"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: "easeInOut" }}
+              className="flex-1 flex flex-col overflow-hidden h-full w-full"
             >
               <Outlet />
             </motion.div>

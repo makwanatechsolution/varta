@@ -20,6 +20,7 @@
 :root {
   --bg-main:        #0b141a;
   --bg-sidebar:     #111b21;
+  --bg-header:      #111b21;
   --bg-surface:     #1b2326;
   --bg-card:        #202c33;
   --border-subtle:  rgba(255,255,255,0.08);
@@ -47,7 +48,8 @@
 .light {
   --bg-main:        #f0f2f5;
   --bg-sidebar:     #ffffff;
-  --bg-surface:     #f7f8fa;
+  --bg-header:      #ffffff;
+  --bg-surface:     #f8fafc;
   --bg-card:        #ffffff;
   --border-subtle:  #e2e8f0;
   --text-main:      #111b21;
@@ -57,7 +59,7 @@
   --msg-text-in:    #111b21;
   --msg-text-out:   #ffffff;
   --scrollbar-thumb: #c1c9d0;
-  --nav-rail-bg:    #edeff1;
+  --nav-rail-bg:    #f0f2f5;
   --input-bg:       #f0f2f5;
   --bottom-nav-bg:  #ffffff;
 }
@@ -66,6 +68,7 @@
 .dark {
   --bg-main:        #0b141a;
   --bg-sidebar:     #111b21;
+  --bg-header:      #111b21;
   --bg-surface:     #1b2326;
   --bg-card:        #202c33;
   --border-subtle:  rgba(255,255,255,0.08);
@@ -85,6 +88,7 @@
 .amoled {
   --bg-main:        #000000;
   --bg-sidebar:     #050505;
+  --bg-header:      #050505;
   --bg-surface:     #0a0a0a;
   --bg-card:        #121212;
   --border-subtle:  rgba(255,255,255,0.07);
@@ -104,6 +108,7 @@
 .midnight {
   --bg-main:        #0f172a;
   --bg-sidebar:     #1e293b;
+  --bg-header:      #1e293b;
   --bg-surface:     #334155;
   --bg-card:        #1e293b;
   --border-subtle:  rgba(255,255,255,0.1);
@@ -202,6 +207,15 @@ img, video, svg, canvas, [data-no-transition],
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Accessibility preferences are persisted by the Settings screen. */
+.high-contrast { --border-subtle: color-mix(in srgb, var(--text-main) 55%, transparent); }
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
 
 /* ─── Composer Input ─────────────────────────────────────────────────────── */
 .composer-input {

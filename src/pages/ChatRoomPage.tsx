@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { isToday, isYesterday, format } from "date-fns";
 import {
-  ArrowLeft, Phone, Video, Send, ImageIcon, Smile,
+  ArrowLeft, Phone, Video, Send, Smile,
   X, Reply as ReplyIcon, Edit2, MessageCircle, Plus
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -14,6 +14,7 @@ import { GifPicker } from "../components/chat/GifPicker";
 import { VoiceRecorder } from "../components/chat/VoiceRecorder";
 import { TypingIndicatorBubble } from "../components/chat/TypingIndicatorBubble";
 import { Avatar } from "../components/ui/Avatar";
+import { GifIcon } from "../components/ui/GifIcon";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import type { EmojiClickData } from "emoji-picker-react";
 import type { GifResult, Message, Conversation, Profile } from "../types/database";
@@ -100,6 +101,26 @@ export function ChatRoomPage() {
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside listener for Emoji composer
+  useEffect(() => {
+    if (!showEmojiComposer) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
+        setShowEmojiComposer(false);
+      }
+    };
+    const timer = setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [showEmojiComposer]);
 
   // BUG-6 FIX: removed duplicate usePresence() call — it runs in AppRoutes already
 
@@ -120,8 +141,10 @@ export function ChatRoomPage() {
 
   const scrollToBottom = (smooth = false) => {
     const container = messagesContainerRef.current;
-    if (container) container.scrollTop = container.scrollHeight;
-    bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
+    if (!container) return;
+    // Only scroll the conversation viewport. scrollIntoView() can also move
+    // ancestor panels and leaves the first bubble hidden under the header.
+    container.scrollTo({ top: container.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   };
 
   useEffect(() => {
@@ -193,6 +216,7 @@ export function ChatRoomPage() {
   };
 
   const handleGif = async (gif: GifResult) => {
+    setGifOpen(false);
     await sendMessage("", "gif", { gif_url: gif.url, media_url: gif.url });
   };
 
@@ -233,9 +257,9 @@ export function ChatRoomPage() {
     >
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header
-        className="flex items-center gap-3 px-4 py-3 shadow-sm border-b z-10 sticky top-0 backdrop-blur-xl"
+        className="flex shrink-0 items-center gap-3 px-4 py-3 shadow-sm border-b z-10 backdrop-blur-xl"
         style={{
-          backgroundColor: "var(--bg-surface)",
+          backgroundColor: "var(--bg-header)",
           borderColor: "var(--border-subtle)",
           paddingTop: "max(12px, env(safe-area-inset-top, 12px))",
         }}
@@ -291,7 +315,7 @@ export function ChatRoomPage() {
       <div
         ref={messagesContainerRef}
         className={clsx(
-          "flex-1 min-h-0 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide transition-all",
+          "flex flex-1 min-h-0 flex-col gap-2 overflow-y-auto px-4 py-5 scrollbar-hide transition-all",
           fontSize === "small" && "text-[13px]",
           fontSize === "large" && "text-[17px]",
           (!fontSize || fontSize === "medium") && "text-[15px]"
@@ -320,9 +344,9 @@ export function ChatRoomPage() {
           const dateLabel = getDateDividerLabel(msg.created_at);
 
           return (
-            <div key={msg.id}>
+            <div key={msg.id} className="shrink-0">
               {showDateDivider && dateLabel && (
-                <div className="flex justify-center my-4 sticky top-2 z-10">
+                <div className="flex justify-center py-3">
                   <span
                     className="px-3.5 py-1 text-[11px] font-bold rounded-full shadow-md border backdrop-blur-md uppercase tracking-wider transition-colors"
                     style={{
@@ -350,7 +374,7 @@ export function ChatRoomPage() {
             <TypingIndicatorBubble />
           </div>
         )}
-        <div ref={bottomRef} className="h-2" />
+        <div ref={bottomRef} className="h-1 shrink-0" />
       </div>
 
       {/* ── Composer ────────────────────────────────────────────────────── */}
@@ -367,6 +391,7 @@ export function ChatRoomPage() {
         {/* Emoji picker — theme-aware */}
         {showEmojiComposer && (
           <div
+            ref={emojiRef}
             className="absolute bottom-full left-2 mb-2 z-50 shadow-2xl rounded-2xl overflow-hidden border"
             style={{ borderColor: "var(--border-subtle)" }}
           >
@@ -422,7 +447,7 @@ export function ChatRoomPage() {
           </div>
         )}
 
-        <div className="flex items-end gap-2 p-1 relative overflow-hidden">
+        <div className="flex min-w-0 items-end gap-2 p-1 relative">
           {!isVoiceRecording && (
             <div className="flex items-center gap-1 mb-1 shrink-0">
               <button
@@ -438,8 +463,10 @@ export function ChatRoomPage() {
                 onClick={() => setGifOpen(true)}
                 className="rounded-full p-2 transition-colors hover:opacity-70"
                 style={{ color: "var(--text-muted)" }}
+                title="GIF picker"
+                aria-label="Open GIF picker"
               >
-                <ImageIcon className="h-6 w-6" />
+                <GifIcon className="h-6 w-6" />
               </button>
               <button
                 type="button"

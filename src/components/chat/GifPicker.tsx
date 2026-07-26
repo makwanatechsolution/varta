@@ -33,7 +33,29 @@ export function GifPicker({ open, onClose, onSelect }: GifPickerProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<number | null>(null);
+
+  // Click outside handler to close GIF section automatically
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    const timer = setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }, 50);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [open, onClose]);
 
   // Load GIF content when picker opens or parameters change
   const fetchGifs = useCallback(async (query: string) => {
@@ -107,6 +129,7 @@ export function GifPicker({ open, onClose, onSelect }: GifPickerProps) {
 
   return (
     <div
+      ref={pickerRef}
       className="absolute bottom-full left-0 z-50 mb-3 w-[420px] max-w-[92vw] h-[520px] rounded-3xl border border-zinc-800 bg-[#111b21] shadow-2xl overflow-hidden flex flex-col backdrop-blur-3xl animate-in fade-in slide-in-from-bottom-3 duration-200"
       onClick={(e) => e.stopPropagation()}
     >

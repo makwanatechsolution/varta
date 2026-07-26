@@ -56,7 +56,7 @@ export function Avatar({ src, name, size = "md", presence, showRing, storyUnseen
         className={clsx(
           "relative flex items-center justify-center overflow-hidden rounded-full bg-[#1E88C7]/20 border border-[#1E88C7]/30 font-medium text-white shadow-sm",
           sizes[size],
-          showRing && presence && `ring-2 ring-offset-2 ring-offset-[#111b21] ${RING_COLORS[presence]}`,
+          showRing && presence && `ring-2 ring-offset-0 ${RING_COLORS[presence]}`,
         )}
       >
         {src && !imgError ? (

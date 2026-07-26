@@ -250,10 +250,20 @@ function ProfileSettingsPane() {
   const [isSaved, setIsSaved] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Avatar preview modal state
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayName(profile?.display_name ?? "");
+    setUsername(profile?.username ?? "");
+    setBio(profile?.bio ?? "");
+    setPhone(profile?.phone ?? "");
+  }, [profile?.id, profile?.display_name, profile?.username, profile?.bio, profile?.phone]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   // Helper: Client-side canvas image resizing and compression
   const compressImage = (file: File, maxDim = 512): Promise<Blob> => {
@@ -397,40 +407,54 @@ function ProfileSettingsPane() {
 
   const handleSave = async () => {
     if (!profile) return;
+    if (!displayName.trim() || !username.trim()) {
+      setSaveError("Display name and username are required.");
+      return;
+    }
     setIsSaving(true);
-    await supabase
-      .from("profiles")
-      .update({ display_name: displayName, username, bio, phone })
-      .eq("id", profile.id);
-    await refreshProfile();
-    setIsSaving(false);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    setSaveError(null);
+    try {
+      const { error } = await supabase.from("profiles").update({
+        display_name: displayName.trim(), username: username.trim(), bio: bio.trim(), phone: phone.trim() || null,
+      }).eq("id", profile.id);
+      if (error) throw error;
+      await supabase.auth.updateUser({ data: { display_name: displayName.trim() } });
+      await refreshProfile();
+      setIsSaved(true);
+      window.setTimeout(() => setIsSaved(false), 3000);
+    } catch (error: any) {
+      setSaveError(error.message || "Profile changes could not be saved. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Profile Settings</h2>
-        <p className="text-sm text-zinc-400">Manage your identity, avatar, bio, and personal QR card</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Profile Settings</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Manage your identity, avatar, bio, and personal QR card</p>
       </div>
+
+      {saveError && <p className="-mt-5 text-sm text-red-500" role="alert">{saveError}</p>}
 
       {/* Avatar & Cover Section with Drag & Drop */}
       <div
         className={clsx(
-          "relative rounded-3xl bg-[#111b21] border transition-all overflow-hidden shadow-xl",
-          dragActive ? "border-[#1E88C7] ring-4 ring-[#1E88C7]/20" : "border-zinc-800"
+          "relative rounded-3xl border transition-all overflow-hidden shadow-xl",
+          dragActive ? "border-[#1E88C7] ring-4 ring-[#1E88C7]/20" : ""
         )}
+        style={{ backgroundColor: "var(--bg-card)", borderColor: dragActive ? "var(--color-primary)" : "var(--border-subtle)" }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="h-28 bg-gradient-to-r from-[#1E88C7]/40 via-[#1E88C7]/20 to-[#0f4c75]/60 border-b border-zinc-800" />
+        <div className="h-28 bg-gradient-to-r from-[#1E88C7]/40 via-[#1E88C7]/20 to-[#0f4c75]/60 border-b" style={{ borderColor: "var(--border-subtle)" }} />
 
         <div className="p-6 relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-5 -mt-12">
             <div className="relative group shrink-0">
-              <div className="rounded-full ring-4 ring-[#111b21] bg-[#111b21] p-1">
+              <div className="rounded-full p-1" style={{ backgroundColor: "var(--bg-card)" }}>
                 <Avatar
                   src={profile?.avatar_url}
                   name={profile?.display_name || "User"}
@@ -463,7 +487,7 @@ function ProfileSettingsPane() {
             </div>
 
             <div className="mt-4 md:mt-0">
-              <h3 className="text-2xl font-bold text-white">{profile?.display_name || "Varta User"}</h3>
+              <h3 className="text-2xl font-bold" style={{ color: "var(--text-main)" }}>{profile?.display_name || "Varta User"}</h3>
               <p className="text-sm text-[#1E88C7] font-medium">@{profile?.username || "username"}</p>
               <div className="flex gap-2 mt-2">
                 <label className="text-[11px] font-semibold text-[#1E88C7] hover:underline cursor-pointer flex items-center gap-1">
@@ -526,31 +550,33 @@ function ProfileSettingsPane() {
       )}
 
       {/* Form Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#111b21] border border-zinc-800 rounded-3xl p-6 shadow-xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border rounded-3xl p-6 shadow-xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             Display Name
           </label>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
+            className="w-full rounded-2xl border px-4 py-3 text-sm outline-none"
+            style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)", color: "var(--text-main)" }}
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             Username
           </label>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
+            className="w-full rounded-2xl border px-4 py-3 text-sm outline-none"
+            style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)", color: "var(--text-main)" }}
           />
         </div>
 
         <div className="md:col-span-2">
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             Bio / About
           </label>
           <textarea
@@ -558,30 +584,33 @@ function ProfileSettingsPane() {
             onChange={(e) => setBio(e.target.value)}
             placeholder="Tell people about yourself..."
             rows={3}
-            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7] resize-none"
+            className="w-full rounded-2xl border px-4 py-3 text-sm outline-none resize-none"
+            style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)", color: "var(--text-main)" }}
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             Phone Number (Contact info)
           </label>
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+1 234 567 8900"
-            className="w-full rounded-2xl bg-[#202c33] border border-zinc-700/60 px-4 py-3 text-sm text-white outline-none focus:border-[#1E88C7]"
+            className="w-full rounded-2xl border px-4 py-3 text-sm outline-none"
+            style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)", color: "var(--text-main)" }}
           />
         </div>
 
         <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-2">
+          <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
             Joined Date
           </label>
           <input
             disabled
             value={profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "2026"}
-            className="w-full rounded-2xl bg-[#202c33]/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-500 outline-none cursor-not-allowed"
+            className="w-full rounded-2xl border px-4 py-3 text-sm outline-none cursor-not-allowed"
+            style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}
           />
         </div>
       </div>
@@ -643,7 +672,7 @@ function StatusSettingsPane() {
     profile?.presence ?? "online"
   );
   const [customText, setCustomText] = useState(profile?.custom_status ?? "");
-  const [expiration, setExpiration] = useState("Never");
+  const [expiration, setExpiration] = useState("Don't clear");
   const [saving, setSaving] = useState(false);
 
   const PRESENCE_OPTIONS: { status: PresenceStatus; label: string; color: string; desc: string }[] = [
@@ -662,10 +691,12 @@ function StatusSettingsPane() {
     if (!profile) return;
     setSaving(true);
     await setManualStatus(selectedPresence);
-    await supabase
+    const expiresAt = expiration === "Don't clear" ? null : new Date(Date.now() + (expiration === "1 Hour" ? 60 : expiration === "4 Hours" ? 240 : 1440) * 60_000).toISOString();
+    const { error } = await supabase
       .from("profiles")
-      .update({ presence: selectedPresence, custom_status: customText })
+      .update({ presence: selectedPresence, custom_status: customText.trim() || null, custom_status_expires_at: expiresAt })
       .eq("id", profile.id);
+    if (error) throw error;
     await refreshProfile();
     setSaving(false);
   };
@@ -750,17 +781,7 @@ function StatusSettingsPane() {
 
 // ─── 3. General Settings Pane ────────────────────────────────────────────────
 function GeneralSettingsPane() {
-  const [lang, setLang] = useState(() => localStorage.getItem("varta_lang") || "English (US)");
-  const [autoStart, setAutoStart] = useState(() => localStorage.getItem("varta_autostart") !== "false");
-  const [autoUpdate, setAutoUpdate] = useState(() => localStorage.getItem("varta_autoupdate") !== "false");
-  const [launchTab, setLaunchTab] = useState(() => localStorage.getItem("varta_launchtab") || "All Chats");
-
-  useEffect(() => {
-    localStorage.setItem("varta_lang", lang);
-    localStorage.setItem("varta_autostart", String(autoStart));
-    localStorage.setItem("varta_autoupdate", String(autoUpdate));
-    localStorage.setItem("varta_launchtab", launchTab);
-  }, [lang, autoStart, autoUpdate, launchTab]);
+  const { appLanguage: lang, setAppLanguage: setLang, autoStart, setAutoStart, autoUpdate, setAutoUpdate, defaultTab: launchTab, setDefaultTab: setLaunchTab } = useSettings();
 
   return (
     <div className="space-y-8">
@@ -905,7 +926,7 @@ function AccountSettingsPane() {
               <input
                 type="password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="At least 6 characters"
                 minLength={6}
                 required
@@ -1109,8 +1130,8 @@ function CallsSettingsPane() {
 
 // ─── 7. Notifications Settings Pane ──────────────────────────────────────────
 function NotificationsSettingsPane() {
-  const [soundAlerts, setSoundAlerts] = useState(() => localStorage.getItem("varta_sound_alerts") !== "false");
-  const [pushNotifs, setPushNotifs] = useState(() => Notification.permission === "granted");
+  const { soundAlerts, setSoundAlerts } = useSettings();
+  const [pushNotifs, setPushNotifs] = useState(() => "Notification" in window && Notification.permission === "granted");
 
   const handleTogglePush = async () => {
     if ("Notification" in window) {
@@ -1121,7 +1142,6 @@ function NotificationsSettingsPane() {
 
   const handleToggleSound = (enabled: boolean) => {
     setSoundAlerts(enabled);
-    localStorage.setItem("varta_sound_alerts", String(enabled));
     callAudio.setMuted(!enabled);
   };
 
@@ -1420,14 +1440,15 @@ function DevicesSettingsPane() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">Linked Devices</h2>
-          <p className="text-sm text-zinc-400">Manage active Varta sessions and link new devices via QR code</p>
+          <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Linked Devices</h2>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Manage active Varta sessions and link new devices via QR code</p>
         </div>
 
         <button
           type="button"
           onClick={() => setShowLinkModal(true)}
-          className="flex items-center gap-2 rounded-2xl bg-[#1E88C7] hover:bg-[#1971A5] px-5 py-3 text-xs font-semibold text-white shadow-lg shadow-[#1E88C7]/20 transition-all self-start md:self-auto"
+          className="flex items-center gap-2 rounded-2xl px-5 py-3 text-xs font-semibold text-white shadow-lg transition-all self-start md:self-auto"
+          style={{ backgroundColor: "var(--color-primary)" }}
         >
           <QrCode className="w-4 h-4" />
           <span>Link a Device / Scan QR</span>
@@ -1435,14 +1456,14 @@ function DevicesSettingsPane() {
       </div>
 
       {/* Active Session List */}
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-5 shadow-xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
+      <div className="border rounded-3xl p-6 space-y-5 shadow-xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
+        <div className="flex items-center justify-between border-b pb-5" style={{ borderColor: "var(--border-subtle)" }}>
           <div className="flex items-center gap-4">
             <div className="p-3.5 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               <Laptop className="w-6 h-6" />
             </div>
             <div>
-              <p className="font-bold text-white text-sm">{currentDevice.deviceName}</p>
+              <p className="font-bold text-sm" style={{ color: "var(--text-main)" }}>{currentDevice.deviceName}</p>
               <p className="text-xs text-emerald-400 font-mono mt-0.5">
                 Active Now · {currentDevice.browser} · Current Active Session
               </p>
@@ -1455,8 +1476,8 @@ function DevicesSettingsPane() {
 
         <div className="flex items-center justify-between pt-2">
           <div>
-            <p className="font-semibold text-white text-sm">Security Session Controls</p>
-            <p className="text-xs text-zinc-400">Log out all other web or mobile sessions except this device</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Security Session Controls</p>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Log out all other web or mobile sessions except this device</p>
           </div>
           <button
             type="button"
@@ -1471,11 +1492,11 @@ function DevicesSettingsPane() {
       {/* Link New Device Modal */}
       {showLinkModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl relative">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="border rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl relative" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
               <div className="flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-[#1E88C7]" />
-                <h3 className="font-bold text-white text-base">Link a Device / Scan QR</h3>
+                <QrCode className="w-5 h-5" style={{ color: "var(--color-primary)" }} />
+                <h3 className="font-bold text-base" style={{ color: "var(--text-main)" }}>Link a Device / Scan QR</h3>
               </div>
               <button
                 type="button"
@@ -1592,11 +1613,12 @@ function DevicesSettingsPane() {
 
 // ─── 11. Security Settings Pane ──────────────────────────────────────────────
 function SecuritySettingsPane() {
-  const [pin, setPin] = useState(() => localStorage.getItem("varta_app_pin") || "");
+  const { appPin: pin, setAppPin: setPin } = useSettings();
   const [savedPin, setSavedPin] = useState(false);
 
   const handleSavePin = () => {
-    localStorage.setItem("varta_app_pin", pin);
+    if (pin && !/^\d{4}$/.test(pin)) return;
+    setPin(pin);
     setSavedPin(true);
     setTimeout(() => setSavedPin(false), 2500);
   };
@@ -1604,13 +1626,13 @@ function SecuritySettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Security & Passcode</h2>
-        <p className="text-sm text-zinc-400">Protect your desktop application with PIN passcode</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Security & Passcode</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Protect your desktop application with PIN passcode</p>
       </div>
 
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
         <div className="space-y-3">
-          <label className="font-semibold text-white text-sm block">4-Digit App Lock Passcode PIN</label>
+          <label className="font-semibold text-sm block" style={{ color: "var(--text-main)" }}>4-Digit App Lock Passcode PIN</label>
           <div className="flex gap-3 max-w-sm">
             <input
               type="password"
@@ -1618,12 +1640,14 @@ function SecuritySettingsPane() {
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               placeholder="e.g. 1234"
-              className="flex-1 rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2.5 text-center font-mono text-base tracking-widest text-white outline-none focus:border-[#1E88C7]"
+              className="flex-1 rounded-xl border px-4 py-2.5 text-center font-mono text-base tracking-widest outline-none"
+              style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)", color: "var(--text-main)" }}
             />
             <button
               type="button"
               onClick={handleSavePin}
-              className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-5 py-2.5 text-xs font-semibold text-white shadow-md transition-all"
+              className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white shadow-md transition-all"
+              style={{ backgroundColor: "var(--color-primary)" }}
             >
               {savedPin ? "Saved!" : "Set PIN"}
             </button>
@@ -1655,13 +1679,13 @@ function AppearanceSettingsPane() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">Appearance & Themes</h2>
-        <p className="text-sm text-zinc-400">Customize theme modes, system preferences, and brand accent colors</p>
+        <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text-main)" }}>Appearance & Themes</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Customize theme modes, system preferences, and brand accent colors</p>
       </div>
 
       {/* 1. Theme Mode Selection */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-white uppercase tracking-wider">Color Theme Mode</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--text-main)" }}>Color Theme Mode</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {themeOptions.map((item) => {
             const isSelected = theme === item.id;
@@ -1670,18 +1694,18 @@ function AppearanceSettingsPane() {
                 key={item.id}
                 type="button"
                 onClick={() => setTheme(item.id as any)}
-                className={clsx(
-                  "p-5 rounded-2xl border text-left transition-all flex flex-col gap-3 relative overflow-hidden",
-                  isSelected
-                    ? "bg-[#111b21] border-[#1E88C7] shadow-xl ring-2 ring-[#1E88C7]/40"
-                    : "bg-[#111b21] border-zinc-800 hover:bg-[#1b2326]"
-                )}
+                className="p-5 rounded-2xl border text-left transition-all flex flex-col gap-3 relative overflow-hidden"
+                style={{
+                  backgroundColor: "var(--bg-card)",
+                  borderColor: isSelected ? "var(--color-primary)" : "var(--border-subtle)",
+                  boxShadow: isSelected ? "0 4px 14px rgba(0,0,0,0.12)" : "none",
+                }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sm text-white">{item.label}</span>
-                  {isSelected && <CheckCircle2 className="h-5 w-5 text-[#1E88C7]" />}
+                  <span className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>{item.label}</span>
+                  {isSelected && <CheckCircle2 className="h-5 w-5" style={{ color: "var(--color-primary)" }} />}
                 </div>
-                <p className="text-xs text-zinc-400">{item.desc}</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{item.desc}</p>
               </button>
             );
           })}
@@ -1689,10 +1713,10 @@ function AppearanceSettingsPane() {
       </div>
 
       {/* 2. Custom Brand Accent Color Picker */}
-      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+      <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}>
         <div>
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-1">Brand Accent Color</h3>
-          <p className="text-xs text-zinc-400">Re-theme primary buttons, active highlights, and indicators live app-wide</p>
+          <h3 className="text-sm font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-main)" }}>Brand Accent Color</h3>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>Re-theme primary buttons, active highlights, and indicators live app-wide</p>
         </div>
 
         {/* Preset Color Swatches */}
@@ -1722,19 +1746,21 @@ function AppearanceSettingsPane() {
 
         {/* Custom Hex Input */}
         <form onSubmit={handleHexSubmit} className="flex items-center gap-3 pt-2">
-          <span className="text-xs text-zinc-400 font-medium">Custom Hex:</span>
+          <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Custom Hex:</span>
           <div className="relative">
             <input
               type="text"
               value={customHex}
               onChange={(e) => setCustomHex(e.target.value)}
               placeholder="#1E88C7"
-              className="w-32 rounded-xl bg-[#202c33] border border-zinc-700/60 px-3 py-2 text-xs text-white font-mono outline-none focus:border-[#1E88C7]"
+              className="w-32 rounded-xl border px-3 py-2 text-xs font-mono outline-none"
+              style={{ backgroundColor: "var(--input-bg)", borderColor: "var(--border-subtle)", color: "var(--text-main)" }}
             />
           </div>
           <button
             type="submit"
-            className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-4 py-2 text-xs font-semibold text-white transition-all shadow-md"
+            className="rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all shadow-md"
+            style={{ backgroundColor: "var(--color-primary)" }}
           >
             Apply Hex
           </button>
@@ -1781,8 +1807,17 @@ function AppearanceSettingsPane() {
 
 // ─── 13. Accessibility Settings Pane ─────────────────────────────────────────
 function AccessibilitySettingsPane() {
-  const [highContrast, setHighContrast] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [highContrast, setHighContrast] = useState(() => localStorage.getItem("varta_high_contrast") === "true");
+  const [reducedMotion, setReducedMotion] = useState(() => localStorage.getItem("varta_reduced_motion") === "true");
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("high-contrast", highContrast);
+    localStorage.setItem("varta_high_contrast", String(highContrast));
+  }, [highContrast]);
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", reducedMotion);
+    localStorage.setItem("varta_reduced_motion", String(reducedMotion));
+  }, [reducedMotion]);
 
   return (
     <div className="space-y-8">
