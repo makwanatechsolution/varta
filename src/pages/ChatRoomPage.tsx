@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import { isToday, isYesterday, format } from "date-fns";
 import {
   ArrowLeft, Phone, Video, Send, ImageIcon, Smile,
   X, Reply as ReplyIcon, Edit2, MessageCircle, Plus
@@ -18,6 +19,18 @@ import type { EmojiClickData } from "emoji-picker-react";
 import type { GifResult, Message, Conversation, Profile } from "../types/database";
 import { supabase } from "../lib/supabase";
 import clsx from "clsx";
+
+function getDateDividerLabel(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    if (isToday(d)) return "Today";
+    if (isYesterday(d)) return "Yesterday";
+    return format(d, "MMMM d, yyyy");
+  } catch {
+    return "";
+  }
+}
 
 // ─── Hook: load conversation info (with live presence updates) ────────────────
 
@@ -299,16 +312,39 @@ export function ChatRoomPage() {
             <p className="text-sm font-medium">No messages yet. Say hello! 👋</p>
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            isOwn={msg.sender_id === user?.id}
-            onReply={() => setReplyTo(msg)}
-            onEdit={() => startEdit(msg)}
-            onDelete={() => deleteMessage(msg.id)}
-          />
-        ))}
+        {messages.map((msg, index) => {
+          const prevMsg = index > 0 ? messages[index - 1] : null;
+          const msgDateStr = new Date(msg.created_at).toDateString();
+          const prevDateStr = prevMsg ? new Date(prevMsg.created_at).toDateString() : null;
+          const showDateDivider = !prevMsg || msgDateStr !== prevDateStr;
+          const dateLabel = getDateDividerLabel(msg.created_at);
+
+          return (
+            <div key={msg.id}>
+              {showDateDivider && dateLabel && (
+                <div className="flex justify-center my-4 sticky top-2 z-10">
+                  <span
+                    className="px-3.5 py-1 text-[11px] font-bold rounded-full shadow-md border backdrop-blur-md uppercase tracking-wider transition-colors"
+                    style={{
+                      backgroundColor: "var(--bg-surface)",
+                      color: "var(--text-muted)",
+                      borderColor: "var(--border-subtle)",
+                    }}
+                  >
+                    {dateLabel}
+                  </span>
+                </div>
+              )}
+              <MessageBubble
+                message={msg}
+                isOwn={msg.sender_id === user?.id}
+                onReply={() => setReplyTo(msg)}
+                onEdit={() => startEdit(msg)}
+                onDelete={() => deleteMessage(msg.id)}
+              />
+            </div>
+          );
+        })}
         {typingUsers.length > 0 && (
           <div className="px-2">
             <TypingIndicatorBubble />

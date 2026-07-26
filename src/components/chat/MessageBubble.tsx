@@ -181,15 +181,21 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
           )}
         </AnimatePresence>
 
-        {/* Quick actions bar (on hover) */}
-        <div className={clsx(
-          "mt-1 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100",
-          isOwn ? "flex-row-reverse" : "",
-        )}>
+        {/* Floating Quick Action Toolbar (WhatsApp/Teams style) */}
+        <div
+          className={clsx(
+            "absolute -top-3.5 z-20 flex items-center gap-1 px-1.5 py-1 rounded-full border backdrop-blur-md shadow-md opacity-0 group-hover:opacity-100 transition-all duration-150 scale-95 group-hover:scale-100",
+            isOwn ? "right-2" : "left-2"
+          )}
+          style={{
+            backgroundColor: "var(--bg-surface)",
+            borderColor: "var(--border-subtle)",
+          }}
+        >
           <button
             type="button"
             onClick={() => setShowPicker(!showPicker)}
-            className="rounded-full p-1.5 bg-surface border border-border-subtle shadow-sm hover:bg-card text-muted hover:text-main transition-all hover:scale-110 active:scale-95"
+            className="p-1 rounded-full hover:bg-card text-muted hover:text-main transition-colors"
             title="React"
           >
             <Smile className="h-3.5 w-3.5" />
@@ -198,7 +204,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             <button
               type="button"
               onClick={onReply}
-              className="rounded-full p-1.5 bg-surface border border-border-subtle shadow-sm hover:bg-card text-muted hover:text-main transition-all hover:scale-110 active:scale-95"
+              className="p-1 rounded-full hover:bg-card text-muted hover:text-main transition-colors"
               title="Reply"
             >
               <Reply className="h-3.5 w-3.5" />
@@ -208,7 +214,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             <button
               type="button"
               onClick={onEdit}
-              className="rounded-full p-1.5 bg-surface border border-border-subtle shadow-sm hover:bg-card text-muted hover:text-warning transition-all hover:scale-110 active:scale-95"
+              className="p-1 rounded-full hover:bg-card text-muted hover:text-amber-500 transition-colors"
               title="Edit"
             >
               <Edit2 className="h-3.5 w-3.5" />
@@ -218,7 +224,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             <button
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
-              className="rounded-full p-1.5 bg-surface border border-border-subtle shadow-sm hover:bg-card text-muted hover:text-error transition-all hover:scale-110 active:scale-95"
+              className="p-1 rounded-full hover:bg-card text-muted hover:text-red-500 transition-colors"
               title="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" />

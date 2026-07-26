@@ -268,13 +268,24 @@ export function AppShell() {
               <Link
                 key={conv.id}
                 to={`/chat/${conv.id}`}
-                className={clsx(
-                  "flex items-center gap-3 px-3 py-3 mx-2 rounded-2xl transition-all relative",
-                  isActive
-                    ? "bg-primary text-white shadow-md shadow-primary/20 font-medium"
-                    : "hover:bg-surface text-main"
-                )}
-                style={isActive ? { backgroundColor: "var(--color-primary)", color: "#ffffff" } : { color: "var(--text-main)" }}
+                className="flex items-center gap-3 px-3.5 py-3 mx-2 rounded-2xl transition-all relative border-l-4"
+                style={isActive
+                  ? {
+                      backgroundColor: "var(--bg-surface)",
+                      borderColor: "var(--color-primary)",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                    }
+                  : {
+                      borderColor: "transparent",
+                      color: "var(--text-main)",
+                    }
+                }
+                onMouseEnter={(e) => {
+                  if (!isActive) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-surface)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+                }}
               >
                 <Avatar
                   src={getConversationAvatar(conv, user!.id)}
@@ -285,21 +296,18 @@ export function AppShell() {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex justify-between items-baseline">
-                    <p className="truncate font-semibold text-[14px]" style={{ color: isActive ? "#ffffff" : "var(--text-main)" }}>
+                    <p className="truncate font-semibold text-[14px]" style={{ color: "var(--text-main)" }}>
                       {title}
                     </p>
                     {conv.last_message_at && (
-                      <span className="text-[11px] shrink-0 ml-2 font-mono" style={{ color: isActive ? "rgba(255,255,255,0.85)" : "var(--text-muted)" }}>
+                      <span className="text-[11px] shrink-0 ml-2" style={{ color: "var(--text-muted)" }}>
                         {new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     )}
                   </div>
                   <p className="truncate text-[12px] mt-0.5"
                     style={{
-                      color: isActive
-                        ? "rgba(255,255,255,0.9)"
-                        : isTyping ? "var(--color-primary)"
-                        : "var(--text-muted)"
+                      color: isTyping ? "var(--color-primary)" : "var(--text-muted)"
                     }}
                   >
                     {isTyping ? "typing..." : preview ?? (conv.type === "group" ? "Group chat" : "Tap to chat")}
