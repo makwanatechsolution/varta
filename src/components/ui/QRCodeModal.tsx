@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { X, Copy, Download, Check, Sparkles, UserPlus } from "lucide-react";
 import { Avatar } from "./Avatar";
 import type { Profile } from "../../types/database";
 import { useNavigate } from "react-router-dom";
+import { generateQRCodeSVG } from "../../lib/qrcode";
 
 interface QRCodeModalProps {
   profile: Profile | null;
@@ -18,7 +19,7 @@ export function QRCodeModal({ profile, onClose }: QRCodeModalProps) {
   const navigate = useNavigate();
 
   const profileUrl = `${window.location.origin}/?user=${profile?.id || ""}`;
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(profileUrl)}`;
+  const qrSvgMarkup = useMemo(() => generateQRCodeSVG(profileUrl, { size: 280, fgColor: "#0b141a" }), [profileUrl]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(profileUrl);
@@ -26,14 +27,13 @@ export function QRCodeModal({ profile, onClose }: QRCodeModalProps) {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     try {
-      const response = await fetch(qrImageUrl);
-      const blob = await response.blob();
+      const blob = new Blob([qrSvgMarkup], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Varta-QR-${profile?.username || "user"}.png`;
+      link.download = `Varta-QR-${profile?.username || "user"}.svg`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -114,12 +114,11 @@ export function QRCodeModal({ profile, onClose }: QRCodeModalProps) {
               <p className="text-xs text-primary font-semibold">@{profile?.username || "username"}</p>
             </div>
 
-            {/* QR Image Container */}
-            <div className="relative p-4 bg-white rounded-3xl shadow-xl border border-gray-200">
-              <img
-                src={qrImageUrl}
-                alt="Varta QR Code"
-                className="w-48 h-48 object-contain rounded-xl"
+            {/* Genuine SVG QR Code Container */}
+            <div className="relative p-4 bg-white rounded-3xl shadow-xl border border-gray-200 flex items-center justify-center">
+              <div
+                className="w-48 h-48 flex items-center justify-center rounded-xl overflow-hidden"
+                dangerouslySetInnerHTML={{ __html: qrSvgMarkup }}
               />
             </div>
 

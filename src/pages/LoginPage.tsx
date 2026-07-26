@@ -2,12 +2,20 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
-import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle, QrCode } from "lucide-react";
+import { generateQRCodeSVG } from "../lib/qrcode";
+import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 export function LoginPage() {
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
+  const [pairingToken, setPairingToken] = useState("");
+
+  useEffect(() => {
+    if (activeTab === "qr" && !pairingToken) {
+      setPairingToken(Math.random().toString(36).substring(2, 8).toUpperCase());
+    }
+  }, [activeTab, pairingToken]);
 
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -309,15 +317,28 @@ export function LoginPage() {
             </form>
           )}
 
-          {/* Tab 3: QR Code Scan Login */}
+          {/* Tab 3: QR Code Scan Login — Real Scannable SVG QR Code */}
           {activeTab === "qr" && (
-            <div className="flex flex-col items-center justify-center p-8 bg-[#111b21] rounded-3xl border border-zinc-800 text-center space-y-4">
-              <div className="p-4 bg-white rounded-2xl shadow-xl">
-                <QrCode className="h-44 w-44 text-black" />
+            <div className="flex flex-col items-center justify-center p-6 bg-[#111b21] rounded-3xl border border-zinc-800 text-center space-y-4">
+              <div className="p-4 bg-white rounded-2xl shadow-xl flex items-center justify-center">
+                <div
+                  className="w-48 h-48 flex items-center justify-center"
+                  dangerouslySetInnerHTML={{
+                    __html: generateQRCodeSVG(
+                      `${window.location.origin}/join?pair=${pairingToken || "varta_pair_token"}`,
+                      { size: 220, fgColor: "#0b141a" }
+                    ),
+                  }}
+                />
               </div>
               <div>
                 <h4 className="font-bold text-white text-base">Scan to Sign In</h4>
                 <p className="text-xs text-zinc-400 mt-1">Open Varta App on your phone → Settings → Linked Devices → Scan QR</p>
+                <div className="mt-3 p-2 bg-[#202c33] rounded-xl border border-zinc-700/60 inline-block">
+                  <p className="text-[11px] text-zinc-400 uppercase font-mono tracking-widest">
+                    Pairing Code: <span className="text-[#1E88C7] font-bold text-xs">{pairingToken ? pairingToken.slice(0, 6).toUpperCase() : "849201"}</span>
+                  </p>
+                </div>
               </div>
             </div>
           )}
