@@ -61,11 +61,28 @@ export function useConversations() {
 
     const silentReload = () => load(true);
 
-    // Realtime: silent reload when conversations or messages update
+    // Realtime: in-place update when messages arrive, silent reload on conversation changes
     const channel = supabase
       .channel("conversations_list")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const newMsg = payload.new as any;
+        setConversations((prev) => {
+          const idx = prev.findIndex((c) => c.id === newMsg.conversation_id);
+          if (idx === -1) {
+            silentReload();
+            return prev;
+          }
+          const updated = [...prev];
+          const item: Conversation = {
+            ...updated[idx],
+            last_message_at: newMsg.created_at,
+            last_message: newMsg as Message,
+          };
+          updated.splice(idx, 1);
+          return [item, ...updated];
+        });
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, silentReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, silentReload)
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCallingContext } from "../contexts/CallingContext";
+import { useSettings, PRESET_ACCENTS } from "../contexts/SettingsContext";
 import { supabase } from "../lib/supabase";
 import { Avatar } from "../components/ui/Avatar";
 import { QRCodeModal } from "../components/ui/QRCodeModal";
@@ -715,15 +716,14 @@ function AccountSettingsPane() {
 
 // ─── 5. Chats Settings Pane ──────────────────────────────────────────────────
 function ChatsSettingsPane() {
-  const [enterToSend, setEnterToSend] = useState(() => localStorage.getItem("varta_enter_to_send") !== "false");
-  const [fontSize, setFontSize] = useState(() => localStorage.getItem("varta_font_size") || "Medium");
-  const [wallpaper, setWallpaper] = useState(() => localStorage.getItem("varta_chat_wallpaper") || "Varta Dark");
-
-  useEffect(() => {
-    localStorage.setItem("varta_enter_to_send", String(enterToSend));
-    localStorage.setItem("varta_font_size", fontSize);
-    localStorage.setItem("varta_chat_wallpaper", wallpaper);
-  }, [enterToSend, fontSize, wallpaper]);
+  const {
+    enterToSend,
+    setEnterToSend,
+    fontSize,
+    setFontSize,
+    chatWallpaper,
+    setChatWallpaper,
+  } = useSettings();
 
   return (
     <div className="space-y-8">
@@ -753,12 +753,12 @@ function ChatsSettingsPane() {
           </div>
           <select
             value={fontSize}
-            onChange={(e) => setFontSize(e.target.value)}
+            onChange={(e) => setFontSize(e.target.value as any)}
             className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
           >
-            <option>Small (13px)</option>
-            <option>Medium (15px)</option>
-            <option>Large (17px)</option>
+            <option value="small">Small (13px)</option>
+            <option value="medium">Medium (15px)</option>
+            <option value="large">Large (17px)</option>
           </select>
         </div>
 
@@ -768,14 +768,16 @@ function ChatsSettingsPane() {
             <p className="text-xs text-zinc-400">Select background aesthetic for chat rooms</p>
           </div>
           <select
-            value={wallpaper}
-            onChange={(e) => setWallpaper(e.target.value)}
+            value={chatWallpaper}
+            onChange={(e) => setChatWallpaper(e.target.value as any)}
             className="rounded-xl bg-[#202c33] border border-zinc-700/60 px-4 py-2 text-xs text-white outline-none"
           >
-            <option>Varta Dark (Default)</option>
-            <option>WhatsApp Classic Dark</option>
-            <option>Telegram Night Blue</option>
-            <option>AMOLED Black Pattern</option>
+            <option value="varta_dark">Varta Dark (Default)</option>
+            <option value="whatsapp_dark">WhatsApp Classic Dark Pattern</option>
+            <option value="telegram_night">Telegram Night Blue Pattern</option>
+            <option value="amoled_pattern">AMOLED Pure Black Pattern</option>
+            <option value="light_paper">Clean Light Paper</option>
+            <option value="emerald_soft">Soft Emerald Dark</option>
           </select>
         </div>
       </div>
@@ -1237,58 +1239,144 @@ function SecuritySettingsPane() {
 
 // ─── 12. Appearance Settings Pane ────────────────────────────────────────────
 function AppearanceSettingsPane() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("varta_theme") || "dark");
+  const { theme, setTheme, accentColor, setAccentColor, resolvedTheme } = useSettings();
+  const [customHex, setCustomHex] = useState(accentColor);
 
-  const applyTheme = (t: string) => {
-    setTheme(t);
-    localStorage.setItem("varta_theme", t);
-    document.documentElement.classList.remove("dark", "amoled", "midnight");
+  const themeOptions = [
+    { id: "system", label: "System (Auto)", desc: "Live-follows your OS light/dark preference" },
+    { id: "light", label: "Light Mode", desc: "Clean Slate Light (#f8fafc) for bright environments" },
+    { id: "dark", label: "Varta Dark (Default)", desc: "Sleek WhatsApp/Telegram Dark (#0b141a)" },
+    { id: "amoled", label: "AMOLED Pure Black", desc: "True pitch-black (#000000) for OLED screens" },
+    { id: "midnight", label: "Midnight Navy Blue", desc: "Deep slate blue (#0f172a) aesthetic" },
+  ];
 
-    if (t === "amoled") {
-      document.documentElement.classList.add("amoled");
-    } else if (t === "midnight") {
-      document.documentElement.classList.add("midnight");
-    } else {
-      document.documentElement.classList.add("dark");
-    }
+  const handleHexSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccentColor(customHex);
   };
 
   return (
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-white">Appearance & Themes</h2>
-        <p className="text-sm text-zinc-400">Customize color palettes, dark modes, and visual aesthetics</p>
+        <p className="text-sm text-zinc-400">Customize theme modes, system preferences, and brand accent colors</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[
-          { id: "dark", label: "Varta Dark (Default)", desc: "Sleek WhatsApp/Telegram Dark (#0b141a)" },
-          { id: "amoled", label: "AMOLED Pure Black", desc: "True pitch-black (#000000) for OLED" },
-          { id: "midnight", label: "Midnight Navy Blue", desc: "Deep blue tones (#0f172a)" },
-        ].map((item) => {
-          const isSelected = theme === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => applyTheme(item.id)}
-              className={clsx(
-                "p-5 rounded-2xl border text-left transition-all flex flex-col gap-3",
-                isSelected
-                  ? "bg-[#1E88C7]/15 border-[#1E88C7] shadow-xl"
-                  : "bg-[#111b21] border-zinc-800 hover:bg-[#1b2326]"
-              )}
-            >
-              <div className="h-16 w-full rounded-xl bg-[#202c33] border border-zinc-700/60 flex items-center justify-center font-bold text-xs text-[#1E88C7]">
-                {item.label}
-              </div>
-              <div>
-                <p className="font-semibold text-sm text-white">{item.label}</p>
+      {/* 1. Theme Mode Selection */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider">Color Theme Mode</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {themeOptions.map((item) => {
+            const isSelected = theme === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTheme(item.id as any)}
+                className={clsx(
+                  "p-5 rounded-2xl border text-left transition-all flex flex-col gap-3 relative overflow-hidden",
+                  isSelected
+                    ? "bg-[#111b21] border-[#1E88C7] shadow-xl ring-2 ring-[#1E88C7]/40"
+                    : "bg-[#111b21] border-zinc-800 hover:bg-[#1b2326]"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-white">{item.label}</span>
+                  {isSelected && <CheckCircle2 className="h-5 w-5 text-[#1E88C7]" />}
+                </div>
                 <p className="text-xs text-zinc-400">{item.desc}</p>
-              </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. Custom Brand Accent Color Picker */}
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-6 shadow-xl">
+        <div>
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-1">Brand Accent Color</h3>
+          <p className="text-xs text-zinc-400">Re-theme primary buttons, active highlights, and indicators live app-wide</p>
+        </div>
+
+        {/* Preset Color Swatches */}
+        <div className="flex flex-wrap items-center gap-3">
+          {PRESET_ACCENTS.map((swatch) => {
+            const active = accentColor.toLowerCase() === swatch.hex.toLowerCase();
+            return (
+              <button
+                key={swatch.hex}
+                type="button"
+                onClick={() => {
+                  setAccentColor(swatch.hex);
+                  setCustomHex(swatch.hex);
+                }}
+                className={clsx(
+                  "h-10 px-4 rounded-xl flex items-center gap-2 text-xs font-semibold text-white transition-all transform hover:scale-105 active:scale-95 border",
+                  active ? "border-white ring-2 ring-white/40 shadow-lg" : "border-transparent opacity-85 hover:opacity-100"
+                )}
+                style={{ backgroundColor: swatch.hex }}
+              >
+                {active && <CheckCircle2 className="h-4 w-4 stroke-[3px]" />}
+                <span>{swatch.name}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom Hex Input */}
+        <form onSubmit={handleHexSubmit} className="flex items-center gap-3 pt-2">
+          <span className="text-xs text-zinc-400 font-medium">Custom Hex:</span>
+          <div className="relative">
+            <input
+              type="text"
+              value={customHex}
+              onChange={(e) => setCustomHex(e.target.value)}
+              placeholder="#1E88C7"
+              className="w-32 rounded-xl bg-[#202c33] border border-zinc-700/60 px-3 py-2 text-xs text-white font-mono outline-none focus:border-[#1E88C7]"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-xl bg-[#1E88C7] hover:bg-[#1971A5] px-4 py-2 text-xs font-semibold text-white transition-all shadow-md"
+          >
+            Apply Hex
+          </button>
+        </form>
+      </div>
+
+      {/* 3. Live Interactive Theme Preview Card */}
+      <div className="bg-[#111b21] border border-zinc-800 rounded-3xl p-6 space-y-4 shadow-xl">
+        <h3 className="text-sm font-semibold text-white uppercase tracking-wider">Live Aesthetic Preview</h3>
+        <div className="p-6 rounded-2xl border border-zinc-800 bg-[#0b141a] flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md"
+              style={{ backgroundColor: accentColor }}
+            >
+              VT
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-white">Varta Live Theme</p>
+              <p className="text-xs text-zinc-400">Active Theme: <span className="text-emerald-400 font-bold uppercase">{resolvedTheme}</span> ({theme})</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span
+              className="px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm"
+              style={{ backgroundColor: accentColor }}
+            >
+              Primary Badge
+            </span>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-md transition-all"
+              style={{ backgroundColor: accentColor }}
+            >
+              Active Button
             </button>
-          );
-        })}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -18,7 +18,7 @@
 }
 
 :root {
-  /* VARTA DARK THEME (Default) */
+  /* VARTA DARK THEME (Default Fallback) */
   --bg-main: #0b141a;
   --bg-sidebar: #111b21;
   --bg-surface: #1b2326;
@@ -26,6 +26,19 @@
   --border-subtle: rgba(255, 255, 255, 0.08);
   --text-main: #e9edef;
   --text-muted: #8696a0;
+  --color-primary: #1E88C7;
+  --color-accent: #1E88C7;
+}
+
+.light {
+  /* LIGHT MODE THEME */
+  --bg-main: #f8fafc;
+  --bg-sidebar: #ffffff;
+  --bg-surface: #f1f5f9;
+  --bg-card: #ffffff;
+  --border-subtle: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
   --color-primary: #1E88C7;
   --color-accent: #1E88C7;
 }

@@ -89,14 +89,18 @@ function AppRoutes() {
   );
 }
 
+import { SettingsProvider } from "./contexts/SettingsContext";
+
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <CallingProvider>
-          <AppRoutes />
-        </CallingProvider>
-      </AuthProvider>
+      <SettingsProvider>
+        <AuthProvider>
+          <CallingProvider>
+            <AppRoutes />
+          </CallingProvider>
+        </AuthProvider>
+      </SettingsProvider>
     </BrowserRouter>
   );
 }

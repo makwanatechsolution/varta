@@ -235,20 +235,14 @@ export function AppShell() {
             </div>
           )}
 
-          <AnimatePresence>
+          <div className="space-y-1">
             {filtered.map((conv) => {
               const preview = getLastMessagePreview(conv);
               const isActive = location.pathname === `/chat/${conv.id}`;
               const isTyping = Boolean(globalTyping[conv.id]?.length);
 
               return (
-                <motion.div
-                  key={conv.id}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.2 }}
-                >
+                <div key={conv.id}>
                   <Link
                     to={`/chat/${conv.id}`}
                     className={clsx(
@@ -284,25 +278,20 @@ export function AppShell() {
                             conv.type === "group" ? "Group chat" : "Tap to chat"
                           ))}
                         </p>
-                        {/* Example Badges */}
                         <div className="flex items-center gap-1.5 shrink-0">
                           {conv.type === "group" && !isActive && (
-                            <span className="rounded-full bg-card border border-border-subtle px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-bold text-muted">
+                            <span className="rounded-full bg-[#1b2326] border border-zinc-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-bold text-zinc-400">
                               group
                             </span>
                           )}
-                          {/* Unread dot placeholder */}
-                          {/* <div className="h-5 min-w-[20px] rounded-full bg-primary flex items-center justify-center px-1">
-                                <span className="text-[11px] font-bold text-white">2</span>
-                              </div> */}
                         </div>
                       </div>
                     </div>
                   </Link>
-                </motion.div>
+                </div>
               );
             })}
-          </AnimatePresence>
+          </div>
         </div>
       </aside>
 

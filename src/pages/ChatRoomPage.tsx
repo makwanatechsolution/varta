@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Phone, Video, Send, ImageIcon, Smile, X, Reply as ReplyIcon, Edit2, MessageCircle, Plus } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { useSettings } from "../contexts/SettingsContext";
 import { useMessages, useTyping } from "../hooks/useChat";
 import { useCalling } from "../hooks/useCalling";
 import { usePresence } from "../hooks/usePresence";
@@ -52,6 +53,7 @@ function useConversationInfo(conversationId: string | undefined, myId: string | 
 export function ChatRoomPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { chatWallpaper, fontSize, enterToSend } = useSettings();
   const { messages, loading, sendMessage, editMessage, deleteMessage } = useMessages(id);
   const { typingUsers, sendTyping } = useTyping(id, user?.id);
   const { conv, otherUser, title } = useConversationInfo(id, user?.id);
@@ -77,10 +79,34 @@ export function ChatRoomPage() {
 
   const { startCall } = useCalling(id);
 
-  // Scroll to bottom on new messages
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isInitialLoadRef = useRef(true);
+
+  // Smart scroll-to-bottom effect (WhatsApp / Instagram behavior)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (!messages.length) return;
+    const container = messagesContainerRef.current;
+
+    if (isInitialLoadRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    if (container) {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 250;
+      const lastMsg = messages[messages.length - 1];
+      const isMyMsg = lastMsg?.sender_id === user?.id;
+
+      if (isNearBottom || isMyMsg) {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  }, [messages, user?.id]);
+
+  useEffect(() => {
+    isInitialLoadRef.current = true;
+  }, [id]);
 
   const handleSend = async () => {
     if (editingMsg) {
@@ -169,8 +195,22 @@ export function ChatRoomPage() {
         </button>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide scroll-smooth">
+      {/* Messages Stream Container */}
+      <div
+        ref={messagesContainerRef}
+        className={clsx(
+          "flex-1 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide transition-all",
+          chatWallpaper === "whatsapp_dark" && "bg-[#0b141a] bg-[radial-gradient(#1b2326_1px,transparent_1px)] [background-size:16px_16px]",
+          chatWallpaper === "telegram_night" && "bg-[#0f172a] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:20px_20px]",
+          chatWallpaper === "amoled_pattern" && "bg-black bg-[radial-gradient(#1e1e1e_1px,transparent_1px)] [background-size:16px_16px]",
+          chatWallpaper === "light_paper" && "bg-[#f8fafc] bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px]",
+          chatWallpaper === "emerald_soft" && "bg-[#0d2018] bg-[radial-gradient(#133024_1px,transparent_1px)] [background-size:16px_16px]",
+          (!chatWallpaper || chatWallpaper === "varta_dark") && "bg-background",
+          fontSize === "small" && "text-[13px]",
+          fontSize === "large" && "text-[17px]",
+          (!fontSize || fontSize === "medium") && "text-[15px]"
+        )}
+      >
         {loading && (
           <div className="flex justify-center p-4">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -275,12 +315,19 @@ export function ChatRoomPage() {
                   else { setText(e.target.value); sendTyping(); }
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
+                  if (enterToSend) {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  } else {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleSend();
+                    }
                   }
                 }}
-                placeholder={editingMsg ? "Edit message..." : "Message"}
+                placeholder={editingMsg ? "Edit message..." : "Message (Enter to send, Shift+Enter for new line)"}
                 rows={1}
                 className="w-full resize-none rounded-2xl bg-card border border-border-subtle px-4 py-3 text-sm text-main outline-none placeholder:text-muted focus:ring-2 focus:ring-primary/20 transition-shadow max-h-32 scrollbar-hide"
               />
