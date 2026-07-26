@@ -26,14 +26,16 @@ function getOtherPresence(conv: Conversation, myId: string) {
 }
 
 function getLastMessagePreview(conv: Conversation) {
-  const msg = (conv as Conversation & { last_message?: { content: string | null; type: string }[] }).last_message;
-  if (!msg || !msg[0]) return null;
-  const m = msg[0];
+  const msg = (conv as any).last_message;
+  if (!msg) return null;
+  const m = Array.isArray(msg) ? msg[0] : msg;
+  if (!m) return null;
   if (m.type === "gif") return "🎞 GIF";
   if (m.type === "image") return "📷 Photo";
   if (m.type === "video") return "🎥 Video";
+  if (m.type === "audio") return "🎙️ Voice note";
   if (m.type === "call_log") return m.content?.split("||")[0] ?? "📞 Call";
-  return m.content ?? "";
+  return m.content || null;
 }
 
 export function AppShell() {
@@ -50,6 +52,14 @@ export function AppShell() {
     getConversationTitle(c, user!.id).toLowerCase().includes(search.toLowerCase()),
   );
 
+  // Dynamic unread badge calculation: count conversations where last message is from other and not current chat
+  const unreadCount = conversations.filter((c) => {
+    const msg = Array.isArray((c as any).last_message) ? (c as any).last_message[0] : (c as any).last_message;
+    const isFromOther = msg && msg.sender_id !== user?.id;
+    const isCurrentChat = location.pathname === `/chat/${c.id}`;
+    return isFromOther && !isCurrentChat;
+  }).length;
+
   const handleAddStory = async () => {
     const text = prompt("What's on your mind?");
     if (text) await postStory({ media_type: "text", text_content: text, background_color: "#6366f1" });
@@ -60,7 +70,7 @@ export function AppShell() {
   };
 
   const navItems = [
-    { path: "/", icon: MessageCircle, label: "All Chats", badge: 3 },
+    { path: "/", icon: MessageCircle, label: "All Chats", badge: unreadCount > 0 ? unreadCount : null },
     { path: "/calls", icon: Phone, label: "Calls" },
     { path: "/status", icon: CircleDot, label: "Updates" },
     { path: "/meetings", icon: CalendarDays, label: "Meetings" },

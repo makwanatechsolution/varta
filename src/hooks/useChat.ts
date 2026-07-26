@@ -26,15 +26,14 @@ export function useConversations() {
     }
 
     const ids = memberships.map((m) => m.conversation_id);
-    const { data, error } = await supabase
+    const { data: convs, error } = await supabase
       .from("conversations")
       .select(`
         *,
         members:conversation_members(
           id, user_id, role,
           profile:profiles(id, display_name, avatar_url, presence, last_seen, custom_status)
-        ),
-        last_message:messages(id, content, type, created_at, sender_id)
+        )
       `)
       .in("id", ids)
       .order("last_message_at", { ascending: false, nullsFirst: false });
@@ -42,17 +41,34 @@ export function useConversations() {
     if (error) {
       console.error("Error loading conversations:", error);
     }
-    
-    // Process conversations to ensure last_message is correctly represented
-    const processedData = (data as any[])?.map(conv => {
-      let lastMsg = conv.last_message;
-      if (Array.isArray(lastMsg)) {
-        lastMsg = lastMsg.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-      }
-      return { ...conv, last_message: lastMsg };
-    }) as Conversation[];
 
-    setConversations(processedData ?? []);
+    if (!convs?.length) {
+      setConversations([]);
+      if (!silent) setLoading(false);
+      return;
+    }
+
+    // Fetch latest message for each conversation to guarantee accurate last_message preview
+    const processedData = await Promise.all(
+      (convs as any[]).map(async (conv: any) => {
+        const { data: lastMsgs } = await supabase
+          .from("messages")
+          .select("id, content, type, created_at, sender_id")
+          .eq("conversation_id", conv.id)
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        const lastMsg = lastMsgs && lastMsgs.length > 0 ? lastMsgs[0] : null;
+        return {
+          ...conv,
+          last_message: lastMsg,
+          last_message_at: lastMsg?.created_at || conv.last_message_at,
+        };
+      })
+    );
+
+    setConversations(processedData as Conversation[]);
     if (!silent) setLoading(false);
   }, [user]);
 

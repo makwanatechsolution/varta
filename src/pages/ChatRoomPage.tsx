@@ -82,24 +82,34 @@ export function ChatRoomPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
 
+  const scrollToBottom = (smooth = false) => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+    bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
+  };
+
   // Smart scroll-to-bottom effect (WhatsApp / Instagram behavior)
   useEffect(() => {
     if (!messages.length) return;
-    const container = messagesContainerRef.current;
 
     if (isInitialLoadRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      scrollToBottom(false);
+      const t1 = setTimeout(() => scrollToBottom(false), 50);
+      const t2 = setTimeout(() => scrollToBottom(false), 150);
       isInitialLoadRef.current = false;
-      return;
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
 
+    const container = messagesContainerRef.current;
     if (container) {
       const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 250;
       const lastMsg = messages[messages.length - 1];
       const isMyMsg = lastMsg?.sender_id === user?.id;
 
       if (isNearBottom || isMyMsg) {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        scrollToBottom(true);
       }
     }
   }, [messages, user?.id]);
