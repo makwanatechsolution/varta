@@ -373,7 +373,11 @@ export function useMessages(conversationId: string | undefined) {
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
-// Hook for a specific conversation
+// Global broadcast channel name — shared between sendTyping and useGlobalTyping.
+// Using broadcast (not presence) means no channel-already-subscribed conflicts.
+const TYPING_BROADCAST_CHANNEL = "typing_broadcasts";
+
+// Hook for a specific conversation — presence for in-room indicator
 export function useTyping(conversationId: string | undefined, myId: string | undefined) {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -382,7 +386,8 @@ export function useTyping(conversationId: string | undefined, myId: string | und
   useEffect(() => {
     if (!conversationId || !myId) return;
 
-    // Per-room presence channel: tracks who is typing within this conversation
+    // Per-room PRESENCE channel — only used for in-room typing bubble.
+    // useGlobalTyping does NOT touch this channel, so no after-subscribe conflict.
     const ch = supabase.channel(`typing:${conversationId}`, {
       config: { presence: { key: myId } },
     });
@@ -398,89 +403,93 @@ export function useTyping(conversationId: string | undefined, myId: string | und
     ch.subscribe();
     channelRef.current = ch;
 
-    // ── BUG-4 FIX: Removed ghost globalChannelRef ──
-    // Previously a "typing_global" channel was created here but never .subscribe()'d,
-    // so calling .track() on it was a silent no-op — the sidebar never saw typing events.
-    // The global typing channel is now owned exclusively by useGlobalTyping (AppShell).
-    // We broadcast to the sidebar by also tracking on the per-room presence channel,
-    // since useGlobalTyping now listens to each active room's typing channel directly.
-
     return () => {
-      // Clear typing state on leave so we don't get stuck showing "typing..."
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       ch.track({ typing: false }).catch(() => {});
       supabase.removeChannel(ch);
+      channelRef.current = null;
     };
   }, [conversationId, myId]);
 
   const sendTyping = useCallback(() => {
-    if (!channelRef.current) return;
+    if (!channelRef.current || !conversationId || !myId) return;
 
-    // Track typing on the per-room presence channel.
-    // useGlobalTyping in AppShell will observe this same channel.
-    channelRef.current.track({ typing: true, conversationId });
+    // 1. Track on per-room presence channel → in-room typing bubble
+    channelRef.current.track({ typing: true });
+
+    // 2. Send broadcast event → sidebar typing indicator via useGlobalTyping
+    //    We fire-and-forget on the shared broadcast channel.
+    //    Supabase broadcast doesn't require the channel to be "owned" — any
+    //    subscribed channel can send events, and sending without being
+    //    subscribed also works (just delivers to all subscribers).
+    supabase
+      .channel(TYPING_BROADCAST_CHANNEL)
+      .send({
+        type: "broadcast",
+        event: "typing",
+        payload: { uid: myId, cid: conversationId, typing: true },
+      })
+      .catch(() => {});
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
-      channelRef.current?.track({ typing: false, conversationId });
+      channelRef.current?.track({ typing: false });
+      supabase
+        .channel(TYPING_BROADCAST_CHANNEL)
+        .send({
+          type: "broadcast",
+          event: "typing",
+          payload: { uid: myId, cid: conversationId, typing: false },
+        })
+        .catch(() => {});
     }, 2500);
-  }, [conversationId]);
+  }, [conversationId, myId]);
 
   return { typingUsers, sendTyping };
 }
 
-// Hook for all conversations (used in the sidebar)
-// ── BUG-4 FIX: Rewritten to listen on per-room presence channels ──
-// The old implementation subscribed to a "typing_global" presence channel that
-// useTyping never actually subscribed to (only created without calling .subscribe()).
-// Now we observe each active conversation's "typing:<id>" channel — the same
-// channel that sendTyping() broadcasts on — so sidebar typing indicators work.
+// Hook for sidebar — listens ONLY to broadcast events, never touches presence.
+// No channel name conflicts with useTyping's presence channel.
 export function useGlobalTyping(myId: string | undefined) {
   const [typingMap, setTypingMap] = useState<Record<string, string[]>>({});
-  // Keep a ref to the conversations we're currently listening on so we can
-  // diff and unsubscribe stale channels when the conversation list changes.
-  const channelsRef = useRef<Map<string, ReturnType<typeof supabase.channel>>>(new Map());
 
-  const syncTypingChannels = useCallback(
-    (conversationIds: string[]) => {
-      if (!myId) return;
+  useEffect(() => {
+    if (!myId) return;
 
-      const existing = channelsRef.current;
-      const desiredSet = new Set(conversationIds);
+    // Single broadcast channel for all typing sidebar signals.
+    // Broadcast channels have no presence restriction — safe to add listeners
+    // at any time without the "after subscribe" error.
+    const ch = supabase.channel(TYPING_BROADCAST_CHANNEL, {
+      config: { broadcast: { self: false } },
+    });
 
-      // Remove channels for conversations no longer in the list
-      for (const [cid, ch] of existing) {
-        if (!desiredSet.has(cid)) {
-          supabase.removeChannel(ch);
-          existing.delete(cid);
-          setTypingMap((prev) => {
-            const next = { ...prev };
-            delete next[cid];
-            return next;
-          });
-        }
-      }
-
-      // Add channels for new conversations
-      for (const cid of conversationIds) {
-        if (existing.has(cid)) continue;
-
-        const ch = supabase.channel(`typing:${cid}`);
-        ch.on("presence", { event: "sync" }, () => {
-          const state = ch.presenceState<{ typing: boolean; conversationId: string }>();
-          const typers = Object.entries(state)
-            .filter(([uid, payloads]) => uid !== myId && (payloads as any[])[0]?.typing)
-            .map(([uid]) => uid);
-          setTypingMap((prev) => ({ ...prev, [cid]: typers }));
+    ch.on(
+      "broadcast",
+      { event: "typing" },
+      ({ payload }: { payload: { uid: string; cid: string; typing: boolean } }) => {
+        const { uid, cid, typing } = payload;
+        if (uid === myId) return; // ignore own events
+        setTypingMap((prev) => {
+          const existing = prev[cid] ?? [];
+          if (typing) {
+            if (existing.includes(uid)) return prev;
+            return { ...prev, [cid]: [...existing, uid] };
+          } else {
+            const next = existing.filter((u) => u !== uid);
+            if (next.length === existing.length) return prev;
+            return { ...prev, [cid]: next };
+          }
         });
-        ch.subscribe();
-        existing.set(cid, ch);
       }
-    },
-    [myId]
-  );
+    );
 
-  // Expose a way for AppShell to push conversation IDs
-  return { typingMap, syncTypingChannels };
+    ch.subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [myId]);
+
+  // Simple map — no syncTypingChannels needed (broadcast handles all convs at once)
+  return { typingMap, syncTypingChannels: (_ids: string[]) => { /* no-op — broadcast covers all */ } };
 }
 
 // ─── Conversation helpers ──────────────────────────────────────────────────────
