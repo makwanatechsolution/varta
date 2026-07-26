@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import clsx from "clsx";
 import type { PresenceStatus } from "../../types/database";
 
@@ -24,8 +25,14 @@ interface AvatarProps {
 }
 
 export function Avatar({ src, name, size = "md", presence, showRing, storyUnseen, onClick }: AvatarProps) {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
   const sizes = { sm: "h-8 w-8 text-xs", md: "h-10 w-10 text-sm", lg: "h-14 w-14 text-base" };
-  const initials = name.slice(0, 2).toUpperCase();
+  const initials = (name || "Varta").slice(0, 2).toUpperCase();
 
   const Component = onClick ? "button" : "div";
 
@@ -47,12 +54,21 @@ export function Avatar({ src, name, size = "md", presence, showRing, storyUnseen
       )}
       <span
         className={clsx(
-          "relative flex items-center justify-center overflow-hidden rounded-full bg-zinc-700 font-medium text-white",
+          "relative flex items-center justify-center overflow-hidden rounded-full bg-[#1E88C7]/20 border border-[#1E88C7]/30 font-medium text-white shadow-sm",
           sizes[size],
           showRing && presence && `ring-2 ring-offset-2 ring-offset-[#111b21] ${RING_COLORS[presence]}`,
         )}
       >
-        {src ? <img src={src} alt={name} className="h-full w-full object-cover" /> : initials}
+        {src && !imgError ? (
+          <img
+            src={src}
+            alt={name}
+            onError={() => setImgError(true)}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="font-semibold text-primary">{initials}</span>
+        )}
       </span>
     </Component>
   );

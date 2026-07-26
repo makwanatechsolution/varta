@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
-import { MessageCircle, Phone, CircleDot, Settings, Search, Plus, CalendarDays, Archive, LogOut } from "lucide-react";
+import { MessageCircle, Phone, CircleDot, Settings, Search, Plus, CalendarDays, Archive, LogOut, ShieldAlert } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useConversations, useGlobalTyping } from "../../hooks/useChat";
 import { useStories } from "../../hooks/useStories";
@@ -104,6 +104,20 @@ export function AppShell() {
         </div>
 
         <div className="flex flex-col items-center gap-4 w-full">
+          {profile?.is_admin && (
+            <Link
+              to="/admin"
+              title="Admin Dashboard"
+              className={clsx(
+                "relative flex items-center justify-center h-12 w-12 rounded-2xl transition-colors",
+                location.pathname.startsWith("/admin")
+                  ? "bg-[#1E88C7] text-white shadow-md shadow-[#1E88C7]/20"
+                  : "text-amber-400 hover:bg-[#1E88C7]/10 hover:text-[#1E88C7]"
+              )}
+            >
+              <ShieldAlert className={clsx("h-6 w-6", location.pathname.startsWith("/admin") ? "stroke-[2.5px]" : "stroke-[2px]")} />
+            </Link>
+          )}
           <Link
             to="/archive"
             title="Archive"

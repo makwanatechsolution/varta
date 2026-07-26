@@ -293,23 +293,49 @@ export function ActiveCallOverlay() {
   const isVideo = activeCall?.type === "video" || isScreenSharing;
 
   useEffect(() => {
-    if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.play().catch((e) => console.warn("Remote audio play error:", e));
+    if (!remoteStream) return;
+    const el = remoteAudioRef.current;
+    if (el) {
+      el.srcObject = remoteStream;
+      el.play().catch((e) => console.warn("Remote audio play error:", e));
     }
+    const onAddTrack = () => {
+      if (el) {
+        el.srcObject = remoteStream;
+        el.play().catch(() => {});
+      }
+    };
+    remoteStream.addEventListener("addtrack", onAddTrack);
+    return () => {
+      remoteStream.removeEventListener("addtrack", onAddTrack);
+    };
   }, [remoteStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch((e) => console.warn("Remote video play error:", e));
+    if (!remoteStream || !isVideo) return;
+    const el = remoteVideoRef.current;
+    if (el) {
+      el.srcObject = remoteStream;
+      el.play().catch((e) => console.warn("Remote video play error:", e));
     }
+    const onAddTrack = () => {
+      if (el) {
+        el.srcObject = remoteStream;
+        el.play().catch(() => {});
+      }
+    };
+    remoteStream.addEventListener("addtrack", onAddTrack);
+    return () => {
+      remoteStream.removeEventListener("addtrack", onAddTrack);
+    };
   }, [remoteStream, isVideo]);
 
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch((e) => console.warn("Local video play error:", e));
+    if (!localStream || isVideoOff) return;
+    const el = localVideoRef.current;
+    if (el) {
+      el.srcObject = localStream;
+      el.play().catch((e) => console.warn("Local video play error:", e));
     }
   }, [localStream, isVideoOff]);
 
