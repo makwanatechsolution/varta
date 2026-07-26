@@ -22,8 +22,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
-    if (data) setProfile(data as Profile);
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    if (data) {
+      setProfile(data as Profile);
+    } else if (!error) {
+      // Auto-create missing profile record if missing in DB
+      const userRes = await supabase.auth.getUser();
+      const authUser = userRes.data.user;
+      if (authUser) {
+        const displayName = authUser.user_metadata?.display_name || authUser.email?.split("@")[0] || "User";
+        const { data: created } = await supabase
+          .from("profiles")
+          .upsert({
+            id: userId,
+            display_name: displayName,
+            is_approved: false,
+            is_admin: false,
+          })
+          .select()
+          .single();
+        if (created) setProfile(created as Profile);
+      }
+    }
   };
 
   useEffect(() => {

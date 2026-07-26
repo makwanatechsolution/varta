@@ -7,14 +7,11 @@ import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle, QrCode } fr
 export function LoginPage() {
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"login" | "signup" | "phone" | "qr">("login");
+  const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
 
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<Record<string, string>>({});
@@ -87,38 +84,6 @@ export function LoginPage() {
       if (err) throw err;
     } catch (e: any) {
       setError({ form: `Failed to connect to ${provider}: ${e.message}` });
-    }
-  };
-
-  const handleSendOTP = async () => {
-    if (!phoneNumber.trim()) return;
-    setLoading(true);
-    try {
-      const { error: err } = await supabase.auth.signInWithOtp({ phone: phoneNumber });
-      if (err) throw err;
-      setOtpSent(true);
-    } catch (err: any) {
-      setError({ phone: err.message || "Failed to send OTP code." });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (!otpCode.trim()) return;
-    setLoading(true);
-    try {
-      const { error: err } = await supabase.auth.verifyOtp({
-        phone: phoneNumber,
-        token: otpCode,
-        type: "sms",
-      });
-      if (err) throw err;
-      navigate("/");
-    } catch (err: any) {
-      setError({ otp: err.message || "Invalid OTP code." });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -228,15 +193,6 @@ export function LoginPage() {
               }`}
             >
               Sign Up
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("phone")}
-              className={`flex-1 py-2.5 rounded-xl transition-all ${
-                activeTab === "phone" ? "bg-[#1E88C7] text-white shadow-md font-semibold" : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Phone OTP
             </button>
             <button
               type="button"
@@ -353,49 +309,7 @@ export function LoginPage() {
             </form>
           )}
 
-          {/* Tab 3: Phone OTP Login */}
-          {activeTab === "phone" && (
-            <div className="space-y-4 bg-[#111b21] p-6 rounded-3xl border border-zinc-800">
-              <h3 className="font-semibold text-white text-base">Phone OTP Login</h3>
-              {!otpSent ? (
-                <div className="space-y-4">
-                  <input
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="+1 234 567 8900"
-                    className="w-full rounded-2xl bg-[#0b141a] border border-zinc-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1E88C7]/30"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSendOTP}
-                    disabled={loading}
-                    className="w-full rounded-2xl bg-[#1E88C7] py-3 text-sm font-semibold text-white shadow-lg"
-                  >
-                    {loading ? "Sending..." : "Send Verification OTP Code"}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <input
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="Enter 6-digit OTP"
-                    className="w-full rounded-2xl bg-[#0b141a] border border-zinc-800 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1E88C7]/30 text-center font-mono tracking-widest text-lg"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleVerifyOTP}
-                    disabled={loading}
-                    className="w-full rounded-2xl bg-emerald-600 py-3 text-sm font-semibold text-white shadow-lg"
-                  >
-                    {loading ? "Verifying..." : "Verify & Sign In"}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tab 4: QR Code Scan Login */}
+          {/* Tab 3: QR Code Scan Login */}
           {activeTab === "qr" && (
             <div className="flex flex-col items-center justify-center p-8 bg-[#111b21] rounded-3xl border border-zinc-800 text-center space-y-4">
               <div className="p-4 bg-white rounded-2xl shadow-xl">

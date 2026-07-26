@@ -35,11 +35,13 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   if (!session) return <Navigate to="/login" replace />;
   if (requireAdmin && !profile?.is_admin) return <Navigate to="/" replace />;
   
-  if (!profile?.is_approved && window.location.pathname !== '/pending') {
+  const isApprovedOrAdmin = profile?.is_approved || profile?.is_admin;
+
+  if (!isApprovedOrAdmin && window.location.pathname !== '/pending') {
     return <Navigate to="/pending" replace />;
   }
 
-  if (profile?.is_approved && window.location.pathname === '/pending') {
+  if (isApprovedOrAdmin && window.location.pathname === '/pending') {
     return <Navigate to="/" replace />;
   }
 
