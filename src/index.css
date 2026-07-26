@@ -13,86 +13,113 @@
   --color-success: #22C55E;
   --color-warning: #F59E0B;
   --color-error: #EF4444;
-  
+
   --radius-xl: 24px;
 }
 
+/* ─── VARTA DARK (Default / :root) ──────────────────────────────────────── */
 :root {
-  /* VARTA DARK THEME (Default Fallback) */
-  --bg-main: #0b141a;
-  --bg-sidebar: #111b21;
-  --bg-surface: #1b2326;
-  --bg-card: #202c33;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --text-main: #e9edef;
-  --text-muted: #8696a0;
-  --color-primary: #1E88C7;
-  --color-accent: #1E88C7;
+  --bg-main:        #0b141a;
+  --bg-sidebar:     #111b21;
+  --bg-surface:     #1b2326;
+  --bg-card:        #202c33;
+  --border-subtle:  rgba(255,255,255,0.08);
+  --text-main:      #e9edef;
+  --text-muted:     #8696a0;
+  --msg-bubble-in:  #202c33;
+  --msg-bubble-out: var(--color-primary);
+  --msg-text-in:    #e9edef;
+  --msg-text-out:   #ffffff;
+  --scrollbar-thumb: #374045;
+  --color-primary:  #1E88C7;
+  --color-accent:   #1E88C7;
+  --nav-rail-bg:    #0b141a;
+  --input-bg:       #1b2326;
 }
 
+/* ─── LIGHT MODE ─────────────────────────────────────────────────────────── */
 .light {
-  /* LIGHT MODE THEME */
-  --bg-main: #f8fafc;
-  --bg-sidebar: #ffffff;
-  --bg-surface: #f1f5f9;
-  --bg-card: #ffffff;
-  --border-subtle: #e2e8f0;
-  --text-main: #0f172a;
-  --text-muted: #64748b;
-  --color-primary: #1E88C7;
-  --color-accent: #1E88C7;
+  --bg-main:        #f0f2f5;
+  --bg-sidebar:     #ffffff;
+  --bg-surface:     #f7f8fa;
+  --bg-card:        #ffffff;
+  --border-subtle:  #e2e8f0;
+  --text-main:      #111b21;
+  --text-muted:     #54656f;
+  --msg-bubble-in:  #ffffff;
+  --msg-bubble-out: var(--color-primary);
+  --msg-text-in:    #111b21;
+  --msg-text-out:   #ffffff;
+  --scrollbar-thumb: #c1c9d0;
+  --nav-rail-bg:    #edeff1;
+  --input-bg:       #f0f2f5;
 }
 
+/* ─── VARTA DARK ─────────────────────────────────────────────────────────── */
 .dark {
-  /* VARTA DARK THEME */
-  --bg-main: #0b141a;
-  --bg-sidebar: #111b21;
-  --bg-surface: #1b2326;
-  --bg-card: #202c33;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --text-main: #e9edef;
-  --text-muted: #8696a0;
-  --color-primary: #1E88C7;
-  --color-accent: #1E88C7;
+  --bg-main:        #0b141a;
+  --bg-sidebar:     #111b21;
+  --bg-surface:     #1b2326;
+  --bg-card:        #202c33;
+  --border-subtle:  rgba(255,255,255,0.08);
+  --text-main:      #e9edef;
+  --text-muted:     #8696a0;
+  --msg-bubble-in:  #202c33;
+  --msg-bubble-out: var(--color-primary);
+  --msg-text-in:    #e9edef;
+  --msg-text-out:   #ffffff;
+  --scrollbar-thumb: #374045;
+  --nav-rail-bg:    #0b141a;
+  --input-bg:       #1b2326;
 }
 
+/* ─── AMOLED ─────────────────────────────────────────────────────────────── */
 .amoled {
-  /* AMOLED PURE BLACK THEME */
-  --bg-main: #000000;
-  --bg-sidebar: #050505;
-  --bg-surface: #0a0a0a;
-  --bg-card: #121212;
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --text-main: #ffffff;
-  --text-muted: #71717a;
-  --color-primary: #1E88C7;
-  --color-accent: #1E88C7;
+  --bg-main:        #000000;
+  --bg-sidebar:     #050505;
+  --bg-surface:     #0a0a0a;
+  --bg-card:        #121212;
+  --border-subtle:  rgba(255,255,255,0.07);
+  --text-main:      #ffffff;
+  --text-muted:     #71717a;
+  --msg-bubble-in:  #121212;
+  --msg-bubble-out: var(--color-primary);
+  --msg-text-in:    #ffffff;
+  --msg-text-out:   #ffffff;
+  --scrollbar-thumb: #1a1a1a;
+  --nav-rail-bg:    #000000;
+  --input-bg:       #0a0a0a;
 }
 
+/* ─── MIDNIGHT NAVY ──────────────────────────────────────────────────────── */
 .midnight {
-  /* MIDNIGHT NAVY THEME */
-  --bg-main: #0f172a;
-  --bg-sidebar: #1e293b;
-  --bg-surface: #334155;
-  --bg-card: #1e293b;
-  --border-subtle: rgba(255, 255, 255, 0.1);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --color-primary: #38bdf8;
-  --color-accent: #38bdf8;
+  --bg-main:        #0f172a;
+  --bg-sidebar:     #1e293b;
+  --bg-surface:     #334155;
+  --bg-card:        #1e293b;
+  --border-subtle:  rgba(255,255,255,0.1);
+  --text-main:      #f8fafc;
+  --text-muted:     #94a3b8;
+  --msg-bubble-in:  #1e293b;
+  --msg-bubble-out: var(--color-primary);
+  --msg-text-in:    #f8fafc;
+  --msg-text-out:   #ffffff;
+  --scrollbar-thumb: #334155;
+  --color-primary:  #38bdf8;
+  --color-accent:   #38bdf8;
+  --nav-rail-bg:    #0f172a;
+  --input-bg:       #1e293b;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ─── Base Reset ─────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
 
-html,
-body,
-#root {
+html, body, #root {
   height: 100%;
   margin: 0;
   background-color: var(--bg-main);
   color: var(--text-main);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 body {
@@ -102,14 +129,91 @@ body {
   color: var(--text-main);
 }
 
+/* ─── Token Utility Classes ──────────────────────────────────────────────── */
+/* These are THEME-AWARE classes used across all components instead of        */
+/* hardcoded hex colours. They automatically flip when the theme class        */
+/* is toggled on <html>.                                                       */
+
+.bg-app-main    { background-color: var(--bg-main)    !important; }
+.bg-app-sidebar { background-color: var(--bg-sidebar) !important; }
+.bg-app-surface { background-color: var(--bg-surface) !important; }
+.bg-app-card    { background-color: var(--bg-card)    !important; }
+.bg-app-input   { background-color: var(--input-bg)   !important; }
+.bg-nav-rail    { background-color: var(--nav-rail-bg) !important; }
+
+.text-app-main  { color: var(--text-main)  !important; }
+.text-app-muted { color: var(--text-muted) !important; }
+
+.border-app     { border-color: var(--border-subtle) !important; }
+
+.msg-bubble-in {
+  background-color: var(--msg-bubble-in) !important;
+  color: var(--msg-text-in) !important;
+}
+.msg-bubble-out {
+  background-color: var(--msg-bubble-out) !important;
+  color: var(--msg-text-out) !important;
+}
+
 /* ─── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #202c33; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #374045; }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #374045);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { opacity: 0.8; }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── Transition for theme switches ─────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+
+/* Exclude expensive transitions */
+img, video, svg, canvas, [data-no-transition] {
+  transition: none !important;
+}
+
+/* ─── Nav-rail active indicator ─────────────────────────────────────────── */
+.nav-item-active {
+  background-color: var(--color-primary) !important;
+  color: #ffffff !important;
+}
+.nav-item {
+  color: var(--text-muted);
+}
+.nav-item:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+}
+
+/* ─── Conversation list item ─────────────────────────────────────────────── */
+.conv-item { background-color: transparent; }
+.conv-item:hover { background-color: var(--bg-surface); }
+.conv-item-active {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+
+/* ─── Message composer ───────────────────────────────────────────────────── */
+.composer-input {
+  background-color: var(--input-bg);
+  color: var(--text-main);
+  border-color: var(--border-subtle);
+}
+.composer-input::placeholder { color: var(--text-muted); }
+.composer-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
 
 /* ─── Emoji Picker ───────────────────────────────────────────────────────── */
 .emoji-picker {
@@ -118,63 +222,59 @@ body {
   display: flex;
   flex-direction: column;
   border-radius: 16px;
-  background: #111b21;
-  border: 1px solid #202c33;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
   overflow: hidden;
 }
-
 .emoji-picker__search-bar {
   padding: 10px 10px 6px;
-  border-bottom: 1px solid #202c33;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .emoji-picker__search-input {
   width: 100%;
-  background: #202c33;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 7px 12px;
   font-size: 13px;
-  color: #fff;
+  color: var(--text-main);
   outline: none;
 }
-
 .emoji-picker__categories {
   display: flex;
   justify-content: space-around;
   padding: 6px 4px;
-  border-bottom: 1px solid #202c33;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .emoji-picker__category-btn {
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  opacity: 0.6;
+  background: none; border: none; font-size: 16px;
+  cursor: pointer; opacity: 0.6;
   transition: opacity 0.15s ease;
 }
 .emoji-picker__category-btn:hover,
-.emoji-picker__category-btn--active {
-  opacity: 1;
-}
-
+.emoji-picker__category-btn--active { opacity: 1; }
 .emoji-picker__grid {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  padding: 10px;
-  overflow-y: auto;
+  gap: 4px; padding: 10px; overflow-y: auto;
 }
 .emoji-picker__emoji-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  border-radius: 8px;
-  padding: 4px;
+  background: none; border: none; font-size: 20px;
+  cursor: pointer; border-radius: 8px; padding: 4px;
   transition: background 0.15s ease;
 }
-.emoji-picker__emoji-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+.emoji-picker__emoji-btn:hover { background: var(--bg-surface); }
+
+/* ─── Light-mode specific overrides for 3rd party pickers ─────────────────── */
+.light aside.epr-main,
+.light .epr-main {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-subtle) !important;
 }
+.light .epr-search {
+  background-color: var(--input-bg) !important;
+  color: var(--text-main) !important;
+}
+.light .epr-category-nav { border-bottom-color: var(--border-subtle) !important; }

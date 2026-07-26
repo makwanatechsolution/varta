@@ -24,9 +24,9 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   const { session, profile, loading } = useAuth();
   if (loading || (!profile && session)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0b141a]">
-        <div className="flex flex-col items-center gap-4 text-zinc-500">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-[#1E88C7]" />
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "var(--bg-main)" }}>
+        <div className="flex flex-col items-center gap-4" style={{ color: "var(--text-muted)" }}>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--color-primary)", borderTopColor: "transparent" }} />
           <span className="text-sm">Loading Varta...</span>
         </div>
       </div>

@@ -1,11 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Phone, Video, Send, ImageIcon, Smile, X, Reply as ReplyIcon, Edit2, MessageCircle, Plus } from "lucide-react";
+import {
+  ArrowLeft, Phone, Video, Send, ImageIcon, Smile,
+  X, Reply as ReplyIcon, Edit2, MessageCircle, Plus
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useSettings } from "../contexts/SettingsContext";
 import { useMessages, useTyping } from "../hooks/useChat";
 import { useCalling } from "../hooks/useCalling";
-import { usePresence } from "../hooks/usePresence";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { GifPicker } from "../components/chat/GifPicker";
 import { VoiceRecorder } from "../components/chat/VoiceRecorder";
@@ -17,7 +19,7 @@ import type { GifResult, Message, Conversation, Profile } from "../types/databas
 import { supabase } from "../lib/supabase";
 import clsx from "clsx";
 
-// ─── Hook: load conversation info ────────────────────────────────────────────
+// ─── Hook: load conversation info (with live presence updates) ────────────────
 
 function useConversationInfo(conversationId: string | undefined, myId: string | undefined) {
   const [conv, setConv] = useState<Conversation | null>(null);
@@ -25,6 +27,7 @@ function useConversationInfo(conversationId: string | undefined, myId: string | 
 
   useEffect(() => {
     if (!conversationId || !myId) return;
+
     supabase
       .from("conversations")
       .select(`
@@ -44,6 +47,24 @@ function useConversationInfo(conversationId: string | undefined, myId: string | 
       });
   }, [conversationId, myId]);
 
+  // BUG-7 FIX: live presence update for the other user's header status
+  useEffect(() => {
+    if (!otherUser?.id) return;
+    const ch = supabase
+      .channel(`profile_presence:${otherUser.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${otherUser.id}` },
+        (payload) => {
+          setOtherUser((prev) =>
+            prev ? { ...prev, presence: (payload.new as any).presence, last_seen: (payload.new as any).last_seen } : prev
+          );
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [otherUser?.id]);
+
   const title = conv?.title ?? otherUser?.display_name ?? "Chat";
   return { conv, otherUser, title };
 }
@@ -53,7 +74,7 @@ function useConversationInfo(conversationId: string | undefined, myId: string | 
 export function ChatRoomPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { chatWallpaper, fontSize, enterToSend } = useSettings();
+  const { chatWallpaper, fontSize, enterToSend, resolvedTheme } = useSettings();
   const { messages, loading, sendMessage, editMessage, deleteMessage } = useMessages(id);
   const { typingUsers, sendTyping } = useTyping(id, user?.id);
   const { conv, otherUser, title } = useConversationInfo(id, user?.id);
@@ -66,12 +87,13 @@ export function ChatRoomPage() {
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  usePresence();
+
+  // BUG-6 FIX: removed duplicate usePresence() call — it runs in AppRoutes already
 
   const typingNames = typingUsers
     .map(uid => conv?.members?.find(m => m.user_id === uid)?.profile?.display_name)
     .filter(Boolean) as string[];
-    
+
   let typingText = "typing...";
   if (typingNames.length === 1) typingText = `${typingNames[0]} is typing...`;
   else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
@@ -81,42 +103,67 @@ export function ChatRoomPage() {
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isInitialLoadRef = useRef(true);
+  const prevMsgCountRef = useRef(0);
 
   const scrollToBottom = (smooth = false) => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
+    if (container) container.scrollTop = container.scrollHeight;
     bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   };
 
-  // Smart scroll-to-bottom effect (WhatsApp / Instagram behavior)
   useEffect(() => {
     if (!messages.length) return;
+    const currentCount = messages.length;
+    const prevCount = prevMsgCountRef.current;
 
     if (isInitialLoadRef.current) {
       scrollToBottom(false);
       const t1 = setTimeout(() => scrollToBottom(false), 50);
       const t2 = setTimeout(() => scrollToBottom(false), 150);
       isInitialLoadRef.current = false;
+      prevMsgCountRef.current = currentCount;
       return () => { clearTimeout(t1); clearTimeout(t2); };
     }
 
-    const container = messagesContainerRef.current;
-    if (container) {
-      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 250;
-      const lastMsg = messages[messages.length - 1];
-      const isMyMsg = lastMsg?.sender_id === user?.id;
-
-      if (isNearBottom || isMyMsg) {
-        scrollToBottom(true);
+    if (currentCount > prevCount) {
+      prevMsgCountRef.current = currentCount;
+      const container = messagesContainerRef.current;
+      if (container) {
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 250;
+        const lastMsg = messages[messages.length - 1];
+        const isMyMsg = lastMsg?.sender_id === user?.id;
+        if (isNearBottom || isMyMsg) scrollToBottom(true);
       }
+    } else {
+      prevMsgCountRef.current = currentCount;
     }
   }, [messages, user?.id]);
 
   useEffect(() => {
     isInitialLoadRef.current = true;
+    prevMsgCountRef.current = 0;
   }, [id]);
+
+  // ── Wallpaper background style ──────────────────────────────────────────────
+  const wallpaperStyle = useMemo((): React.CSSProperties => {
+    switch (chatWallpaper) {
+      case "whatsapp_dark":
+        return { backgroundColor: "#0b141a", backgroundImage: "radial-gradient(#1b2326 1px, transparent 1px)", backgroundSize: "16px 16px" };
+      case "telegram_night":
+        return { backgroundColor: "#0f172a", backgroundImage: "radial-gradient(#1e293b 1px, transparent 1px)", backgroundSize: "20px 20px" };
+      case "amoled_pattern":
+        return { backgroundColor: "#000000", backgroundImage: "radial-gradient(#1e1e1e 1px, transparent 1px)", backgroundSize: "16px 16px" };
+      case "light_paper":
+        return { backgroundColor: "#f8fafc", backgroundImage: "radial-gradient(#e2e8f0 1px, transparent 1px)", backgroundSize: "16px 16px" };
+      case "emerald_soft":
+        return { backgroundColor: "#0d2018", backgroundImage: "radial-gradient(#133024 1px, transparent 1px)", backgroundSize: "16px 16px" };
+      default:
+        return { backgroundColor: "var(--bg-main)" };
+    }
+  }, [chatWallpaper]);
+
+  // ── Emoji picker theme follows app theme ────────────────────────────────────
+  const emojiTheme = resolvedTheme === "light" ? Theme.LIGHT : Theme.DARK;
 
   const handleSend = async () => {
     if (editingMsg) {
@@ -167,10 +214,16 @@ export function ChatRoomPage() {
   const cancelEdit = () => { setEditingMsg(null); setEditText(""); };
 
   return (
-    <div className="flex h-screen flex-col bg-background relative z-0 overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center gap-3 bg-surface/80 backdrop-blur-xl px-4 py-3 shadow-sm border-b border-border-subtle z-10 sticky top-0">
-        <Link to="/" className="md:hidden text-muted hover:text-main transition-colors">
+    <div
+      className="flex h-screen flex-col relative z-0 overflow-hidden"
+      style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
+    >
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <header
+        className="flex items-center gap-3 px-4 py-3 shadow-sm border-b z-10 sticky top-0 backdrop-blur-xl"
+        style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+      >
+        <Link to="/" className="md:hidden transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }}>
           <ArrowLeft className="h-5 w-5" />
         </Link>
 
@@ -185,49 +238,59 @@ export function ChatRoomPage() {
         )}
 
         <div className="flex-1 min-w-0">
-          <p className="truncate font-semibold text-main">{title}</p>
-          <p className="text-xs text-muted transition-colors">
+          <p className="truncate font-semibold" style={{ color: "var(--text-main)" }}>{title}</p>
+          <p className="text-xs transition-colors" style={{ color: "var(--text-muted)" }}>
             {typingUsers.length > 0
-              ? <span className="text-primary font-medium">{typingText}</span>
+              ? <span style={{ color: "var(--color-primary)", fontWeight: 500 }}>{typingText}</span>
               : conv?.type === "group"
               ? `${conv.members?.length ?? 0} members`
               : otherUser?.presence === "online"
-              ? <span className="text-primary font-medium">online</span>
+              ? <span style={{ color: "var(--color-primary)", fontWeight: 500 }}>online</span>
               : "tap for info"}
           </p>
         </div>
 
-        <button type="button" onClick={() => startCall("voice", otherUser || undefined)} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors" title="Voice Call">
+        <button
+          type="button"
+          onClick={() => startCall("voice", otherUser || undefined)}
+          className="rounded-full p-2 transition-colors hover:opacity-70"
+          style={{ color: "var(--color-primary)" }}
+          title="Voice Call"
+        >
           <Phone className="h-5 w-5" />
         </button>
-        <button type="button" onClick={() => startCall("video", otherUser || undefined)} className="rounded-full p-2 text-primary hover:bg-primary/10 transition-colors" title="Video Call">
+        <button
+          type="button"
+          onClick={() => startCall("video", otherUser || undefined)}
+          className="rounded-full p-2 transition-colors hover:opacity-70"
+          style={{ color: "var(--color-primary)" }}
+          title="Video Call"
+        >
           <Video className="h-5 w-5" />
         </button>
       </header>
 
-      {/* Messages Stream Container */}
+      {/* ── Messages Stream ──────────────────────────────────────────────── */}
       <div
         ref={messagesContainerRef}
         className={clsx(
           "flex-1 space-y-2 overflow-y-auto px-4 py-6 scrollbar-hide transition-all",
-          chatWallpaper === "whatsapp_dark" && "bg-[#0b141a] bg-[radial-gradient(#1b2326_1px,transparent_1px)] [background-size:16px_16px]",
-          chatWallpaper === "telegram_night" && "bg-[#0f172a] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:20px_20px]",
-          chatWallpaper === "amoled_pattern" && "bg-black bg-[radial-gradient(#1e1e1e_1px,transparent_1px)] [background-size:16px_16px]",
-          chatWallpaper === "light_paper" && "bg-[#f8fafc] bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px]",
-          chatWallpaper === "emerald_soft" && "bg-[#0d2018] bg-[radial-gradient(#133024_1px,transparent_1px)] [background-size:16px_16px]",
-          (!chatWallpaper || chatWallpaper === "varta_dark") && "bg-background",
           fontSize === "small" && "text-[13px]",
           fontSize === "large" && "text-[17px]",
           (!fontSize || fontSize === "medium") && "text-[15px]"
         )}
+        style={wallpaperStyle}
       >
         {loading && (
           <div className="flex justify-center p-4">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <div
+              className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: "var(--color-primary)", borderTopColor: "transparent" }}
+            />
           </div>
         )}
         {!loading && messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-muted opacity-60">
+          <div className="flex flex-col items-center justify-center h-full gap-4 opacity-60" style={{ color: "var(--text-muted)" }}>
             <MessageCircle className="h-12 w-12" />
             <p className="text-sm font-medium">No messages yet. Say hello! 👋</p>
           </div>
@@ -250,16 +313,21 @@ export function ChatRoomPage() {
         <div ref={bottomRef} className="h-2" />
       </div>
 
-      {/* Composer */}
-      <div className="relative border-t border-border-subtle bg-surface/90 backdrop-blur-md px-2 py-2">
-        {/* GIF picker */}
+      {/* ── Composer ────────────────────────────────────────────────────── */}
+      <div
+        className="relative border-t px-2 py-2 backdrop-blur-md"
+        style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+      >
         <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGif} />
 
-        {/* Full emoji picker */}
+        {/* Emoji picker — theme-aware */}
         {showEmojiComposer && (
-          <div className="absolute bottom-full left-2 mb-2 z-50 shadow-2xl rounded-2xl overflow-hidden border border-border-subtle">
+          <div
+            className="absolute bottom-full left-2 mb-2 z-50 shadow-2xl rounded-2xl overflow-hidden border"
+            style={{ borderColor: "var(--border-subtle)" }}
+          >
             <EmojiPicker
-              theme={Theme.DARK}
+              theme={emojiTheme}
               onEmojiClick={(emojiData: EmojiClickData) => {
                 setText((prev) => prev + emojiData.emoji);
               }}
@@ -269,27 +337,43 @@ export function ChatRoomPage() {
 
         {/* Reply preview */}
         {replyTo && (
-          <div className="flex items-center gap-3 border-b border-border-subtle bg-card rounded-t-2xl px-4 py-3 mx-2 mt-[-8px] shadow-sm">
-            <ReplyIcon className="h-4 w-4 text-primary shrink-0" />
-            <div className="min-w-0 flex-1 border-l-2 border-primary pl-2">
-              <p className="text-xs font-semibold text-primary">{replyTo.sender?.display_name ?? "Message"}</p>
-              <p className="truncate text-xs text-muted">
+          <div
+            className="flex items-center gap-3 border-b rounded-t-2xl px-4 py-3 mx-2 mt-[-8px] shadow-sm"
+            style={{ backgroundColor: "var(--bg-card)", borderColor: "var(--border-subtle)" }}
+          >
+            <ReplyIcon className="h-4 w-4 shrink-0" style={{ color: "var(--color-primary)" }} />
+            <div className="min-w-0 flex-1 border-l-2 pl-2" style={{ borderColor: "var(--color-primary)" }}>
+              <p className="text-xs font-semibold" style={{ color: "var(--color-primary)" }}>
+                {replyTo.sender?.display_name ?? "Message"}
+              </p>
+              <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
                 {replyTo.type === "gif" ? "GIF" : replyTo.content}
               </p>
             </div>
-            <button type="button" onClick={() => setReplyTo(null)} className="rounded-full p-1 hover:bg-surface transition-colors">
-              <X className="h-4 w-4 text-muted hover:text-main" />
+            <button
+              type="button"
+              onClick={() => setReplyTo(null)}
+              className="rounded-full p-1 hover:opacity-70 transition-colors"
+            >
+              <X className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
             </button>
           </div>
         )}
 
         {/* Edit mode banner */}
         {editingMsg && (
-          <div className="flex items-center gap-3 border-b border-border-subtle bg-warning/10 rounded-t-2xl px-4 py-3 mx-2 mt-[-8px]">
-            <Edit2 className="h-4 w-4 text-warning shrink-0" />
-            <span className="flex-1 text-xs font-medium text-warning">Editing message</span>
-            <button type="button" onClick={cancelEdit} className="rounded-full p-1 hover:bg-warning/20 transition-colors">
-              <X className="h-4 w-4 text-warning hover:text-warning" />
+          <div
+            className="flex items-center gap-3 border-b rounded-t-2xl px-4 py-3 mx-2 mt-[-8px]"
+            style={{ backgroundColor: "rgba(245,158,11,0.1)", borderColor: "var(--border-subtle)" }}
+          >
+            <Edit2 className="h-4 w-4 shrink-0 text-amber-500" />
+            <span className="flex-1 text-xs font-medium text-amber-500">Editing message</span>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="rounded-full p-1 hover:opacity-70 transition-colors"
+            >
+              <X className="h-4 w-4 text-amber-500" />
             </button>
           </div>
         )}
@@ -297,13 +381,28 @@ export function ChatRoomPage() {
         <div className="flex items-end gap-2 p-1 relative overflow-hidden">
           {!isVoiceRecording && (
             <div className="flex items-center gap-1 mb-1 shrink-0">
-              <button type="button" onClick={() => setShowEmojiComposer(!showEmojiComposer)} className="rounded-full p-2 text-muted hover:text-main hover:bg-card transition-colors">
+              <button
+                type="button"
+                onClick={() => setShowEmojiComposer(!showEmojiComposer)}
+                className="rounded-full p-2 transition-colors hover:opacity-70"
+                style={{ color: "var(--text-muted)" }}
+              >
                 <Smile className="h-6 w-6" />
               </button>
-              <button type="button" onClick={() => setGifOpen(true)} className="rounded-full p-2 text-muted hover:text-main hover:bg-card transition-colors">
+              <button
+                type="button"
+                onClick={() => setGifOpen(true)}
+                className="rounded-full p-2 transition-colors hover:opacity-70"
+                style={{ color: "var(--text-muted)" }}
+              >
                 <ImageIcon className="h-6 w-6" />
               </button>
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full p-2 text-muted hover:text-main hover:bg-card transition-colors">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-full p-2 transition-colors hover:opacity-70"
+                style={{ color: "var(--text-muted)" }}
+              >
                 <Plus className="h-6 w-6" />
               </button>
             </div>
@@ -315,7 +414,7 @@ export function ChatRoomPage() {
             className="hidden"
             onChange={handleImageUpload}
           />
-          
+
           {!isVoiceRecording ? (
             <div className="flex-1 relative">
               <textarea
@@ -326,20 +425,19 @@ export function ChatRoomPage() {
                 }}
                 onKeyDown={(e) => {
                   if (enterToSend) {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
                   } else {
-                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      handleSend();
-                    }
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); }
                   }
                 }}
                 placeholder={editingMsg ? "Edit message..." : "Message (Enter to send, Shift+Enter for new line)"}
                 rows={1}
-                className="w-full resize-none rounded-2xl bg-card border border-border-subtle px-4 py-3 text-sm text-main outline-none placeholder:text-muted focus:ring-2 focus:ring-primary/20 transition-shadow max-h-32 scrollbar-hide"
+                className="w-full resize-none rounded-2xl px-4 py-3 text-sm outline-none border max-h-32 scrollbar-hide transition-shadow focus:ring-2"
+                style={{
+                  backgroundColor: "var(--input-bg)",
+                  color: "var(--text-main)",
+                  borderColor: "var(--border-subtle)",
+                }}
               />
             </div>
           ) : (
@@ -356,10 +454,8 @@ export function ChatRoomPage() {
               <button
                 type="button"
                 onClick={handleSend}
-                className={clsx(
-                  "rounded-full p-3 shadow-md transition-transform hover:scale-105 active:scale-95",
-                  editingMsg ? "bg-warning text-white" : "bg-primary text-white",
-                )}
+                className="rounded-full p-3 shadow-md transition-transform hover:scale-105 active:scale-95 text-white"
+                style={{ backgroundColor: editingMsg ? "#F59E0B" : "var(--color-primary)" }}
               >
                 <Send className="h-5 w-5" />
               </button>
@@ -368,7 +464,8 @@ export function ChatRoomPage() {
                 <button
                   type="button"
                   onClick={() => setIsVoiceRecording(true)}
-                  className="rounded-full p-3 bg-primary text-white shadow-md transition-transform hover:scale-105 active:scale-95"
+                  className="rounded-full p-3 text-white shadow-md transition-transform hover:scale-105 active:scale-95"
+                  style={{ backgroundColor: "var(--color-primary)" }}
                 >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />

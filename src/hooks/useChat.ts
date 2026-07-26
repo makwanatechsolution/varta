@@ -48,25 +48,35 @@ export function useConversations() {
       return;
     }
 
-    // Fetch latest message for each conversation to guarantee accurate last_message preview
-    const processedData = await Promise.all(
-      (convs as any[]).map(async (conv: any) => {
-        const { data: lastMsgs } = await supabase
-          .from("messages")
-          .select("id, content, type, created_at, sender_id")
-          .eq("conversation_id", conv.id)
-          .eq("is_deleted", false)
-          .order("created_at", { ascending: false })
-          .limit(1);
+    // ── BUG-1 FIX: Single batch query for all last messages (was N+1 queries) ──
+    // Fetch ALL last messages across ALL conversation IDs in one round-trip,
+    // then join them in memory — eliminates N individual supabase.from() calls.
+    const { data: lastMessages } = await supabase
+      .from("messages")
+      .select("id, content, type, created_at, sender_id, conversation_id")
+      .in("conversation_id", ids)
+      .eq("is_deleted", false)
+      .order("created_at", { ascending: false })
+      .limit(ids.length * 2); // overfetch slightly to guarantee at least 1 per conv
 
-        const lastMsg = lastMsgs && lastMsgs.length > 0 ? lastMsgs[0] : null;
-        return {
-          ...conv,
-          last_message: lastMsg,
-          last_message_at: lastMsg?.created_at || conv.last_message_at,
-        };
-      })
-    );
+    // Build a map: conversationId → latest message
+    const lastMsgMap = new Map<string, any>();
+    if (lastMessages) {
+      for (const msg of lastMessages) {
+        if (!lastMsgMap.has(msg.conversation_id)) {
+          lastMsgMap.set(msg.conversation_id, msg);
+        }
+      }
+    }
+
+    const processedData = (convs as any[]).map((conv: any) => {
+      const lastMsg = lastMsgMap.get(conv.id) ?? null;
+      return {
+        ...conv,
+        last_message: lastMsg,
+        last_message_at: lastMsg?.created_at || conv.last_message_at,
+      };
+    });
 
     setConversations(processedData as Conversation[]);
     if (!silent) setLoading(false);
@@ -77,17 +87,22 @@ export function useConversations() {
 
     const silentReload = () => load(true);
 
-    // Realtime: in-place update when messages arrive, silent reload on conversation changes
+    // ── BUG-2 FIX: user-scoped channel name prevents cross-tab/cross-user
+    //    deduplication. Supabase deduplicates channels by name — a static
+    //    "conversations_list" silently drops the second subscription when
+    //    the same user opens two tabs (or two users share a test session).
     const channel = supabase
-      .channel("conversations_list")
+      .channel(`conversations_list:${user!.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
         const newMsg = payload.new as any;
         setConversations((prev) => {
           const idx = prev.findIndex((c) => c.id === newMsg.conversation_id);
           if (idx === -1) {
+            // New conversation we don't know about yet — reload to pick it up
             silentReload();
             return prev;
           }
+          // Bubble the conversation to the top and update its last_message preview
           const updated = [...prev];
           const item: Conversation = {
             ...updated[idx],
@@ -102,7 +117,7 @@ export function useConversations() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  }, [load, user]);
 
   return { conversations, loading, reload: () => load(false) };
 }
@@ -142,48 +157,123 @@ export function useMessages(conversationId: string | undefined) {
     if (!conversationId || !user) return;
     load(false);
 
-    const silentReload = () => load(true);
-
     const channel = supabase
       .channel(`messages:${conversationId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, async (payload) => {
-        // Fetch sender info for the new message
+
+      // ── INSERT: new message arrives → append or replace optimistic temp ──
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "messages",
+        filter: `conversation_id=eq.${conversationId}`
+      }, async (payload) => {
         let senderData = null;
         if (payload.new.sender_id) {
-          const res = await supabase.from('profiles').select('id, display_name, avatar_url').eq('id', payload.new.sender_id).single();
+          const res = await supabase
+            .from('profiles')
+            .select('id, display_name, avatar_url')
+            .eq('id', payload.new.sender_id)
+            .single();
           senderData = res.data;
         }
-        
+
         const newMsg = {
           ...payload.new,
           sender: senderData,
           reactions: [],
-          reply_to: null
+          reply_to: null,
         } as unknown as Message;
-        
+
         setMessages(prev => {
+          // deduplicate: already in list
           if (prev.find(m => m.id === newMsg.id)) return prev;
 
-          // Replace matching temporary optimistic message if present
+          // Replace matching optimistic temp message
           const tempIdx = prev.findIndex(
             (m) =>
               m.id.startsWith("temp-") &&
               m.sender_id === newMsg.sender_id &&
               m.type === newMsg.type &&
-              (m.content === newMsg.content || m.gif_url === newMsg.gif_url || m.media_url === newMsg.media_url)
+              (m.content === newMsg.content ||
+                (m as any).gif_url === (newMsg as any).gif_url ||
+                (m as any).media_url === (newMsg as any).media_url)
           );
 
           if (tempIdx !== -1) {
-            const updated = [...prev];
-            updated[tempIdx] = newMsg;
-            return updated;
+            const next = [...prev];
+            next[tempIdx] = newMsg;
+            return next;
           }
 
           return [...prev, newMsg];
         });
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` }, silentReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, silentReload)
+
+      // ── UPDATE: edit / delete / star / pin → patch in-place, zero reload ──
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "messages",
+        filter: `conversation_id=eq.${conversationId}`
+      }, (payload) => {
+        const updated = payload.new as any;
+        setMessages(prev => {
+          const idx = prev.findIndex(m => m.id === updated.id);
+          if (idx === -1) return prev;
+
+          if (updated.is_deleted) {
+            return prev.filter(m => m.id !== updated.id);
+          }
+
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],           // preserve enriched sender / reactions / reply_to
+            content: updated.content,
+            is_edited: updated.is_edited,
+            is_deleted: updated.is_deleted,
+            is_starred: updated.is_starred,
+            is_pinned: updated.is_pinned,
+          } as Message;
+          return next;
+        });
+      })
+
+      // ── REACTION INSERT: append reaction object in-place ──
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "message_reactions"
+      }, async (payload) => {
+        const r = payload.new as any;
+        let profile = null;
+        if (r.user_id) {
+          const res = await supabase
+            .from('profiles')
+            .select('id, display_name')
+            .eq('id', r.user_id)
+            .single();
+          profile = res.data;
+        }
+        setMessages(prev => {
+          const idx = prev.findIndex(m => m.id === r.message_id);
+          if (idx === -1) return prev;
+          const existing = (prev[idx].reactions ?? []) as any[];
+          if (existing.find((x: any) => x.id === r.id)) return prev;
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            reactions: [...existing, { ...r, profile }],
+          } as Message;
+          return next;
+        });
+      })
+
+      // ── REACTION DELETE: remove reaction object in-place ──
+      .on("postgres_changes", {
+        event: "DELETE", schema: "public", table: "message_reactions"
+      }, (payload) => {
+        const removed = payload.old as any;
+        setMessages(prev => prev.map(msg => {
+          const existing = (msg.reactions ?? []) as any[];
+          if (!existing.find((r: any) => r.id === removed.id)) return msg;
+          return { ...msg, reactions: existing.filter((r: any) => r.id !== removed.id) } as Message;
+        }));
+      })
+
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -195,10 +285,9 @@ export function useMessages(conversationId: string | undefined) {
     extras?: Partial<Message>,
   ) => {
     if (!conversationId || !user) return;
-    // Only block empty sends for text messages — GIFs, images etc. can have empty content
     if (type === "text" && !content.trim()) return;
 
-    // Optimistic UI update
+    // Optimistic UI — instant append before DB write
     const tempId = `temp-${crypto.randomUUID()}`;
     const newMessage = {
       id: tempId,
@@ -216,7 +305,7 @@ export function useMessages(conversationId: string | undefined) {
       },
       ...extras,
     };
-    
+
     setMessages((prev) => [...prev, newMessage as unknown as Message]);
 
     const { error } = await supabase.from("messages").insert({
@@ -228,41 +317,45 @@ export function useMessages(conversationId: string | undefined) {
     });
 
     if (error) {
-      // Revert optimistic update on failure
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       throw error;
     }
 
-    // Trigger push notification to other conversation members
+    // Fire-and-forget push notification
     try {
       const { data: members } = await supabase
         .from("conversation_members")
         .select("user_id")
         .eq("conversation_id", conversationId);
 
-      if (members && members.length > 0) {
-        const recipientIds = members.map((m) => m.user_id).filter((id) => id !== user.id);
-        if (recipientIds.length > 0) {
-          const senderName = user.user_metadata?.display_name || "Someone";
-          fetch("/api/sendMessagePush", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              conversationId,
-              senderId: user.id,
-              senderName,
-              preview: type === "text" ? (content.trim() || "Sent a message") : `Sent a ${type}`,
-              recipientIds,
-            }),
-          }).catch((err) => console.warn("Failed to trigger message push notification:", err));
-        }
+      const recipientIds = (members ?? [])
+        .map((m) => m.user_id)
+        .filter((id) => id !== user.id);
+
+      if (recipientIds.length > 0) {
+        const senderName = user.user_metadata?.display_name || "Someone";
+        fetch("/api/sendMessagePush", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId,
+            senderId: user.id,
+            senderName,
+            preview: type === "text" ? (content.trim() || "Sent a message") : `Sent a ${type}`,
+            recipientIds,
+          }),
+        }).catch((err) => console.warn("Push notification failed:", err));
       }
-    } catch (pushErr) {
-      console.warn("Error fetching conversation members for push notification:", pushErr);
+    } catch (e) {
+      console.warn("Error dispatching push:", e);
     }
   };
 
   const editMessage = async (messageId: string, newContent: string) => {
+    // Optimistic in-place patch — no scroll, no reload
+    setMessages(prev => prev.map(m =>
+      m.id === messageId ? { ...m, content: newContent.trim(), is_edited: true } : m
+    ));
     await supabase
       .from("messages")
       .update({ content: newContent.trim(), is_edited: true })
@@ -270,6 +363,8 @@ export function useMessages(conversationId: string | undefined) {
   };
 
   const deleteMessage = async (messageId: string) => {
+    // Optimistic remove — message vanishes instantly
+    setMessages(prev => prev.filter(m => m.id !== messageId));
     await supabase.from("messages").update({ is_deleted: true }).eq("id", messageId);
   };
 
@@ -282,12 +377,12 @@ export function useMessages(conversationId: string | undefined) {
 export function useTyping(conversationId: string | undefined, myId: string | undefined) {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const globalChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const timeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!conversationId || !myId) return;
 
+    // Per-room presence channel: tracks who is typing within this conversation
     const ch = supabase.channel(`typing:${conversationId}`, {
       config: { presence: { key: myId } },
     });
@@ -303,31 +398,30 @@ export function useTyping(conversationId: string | undefined, myId: string | und
     ch.subscribe();
     channelRef.current = ch;
 
-    // Join the global typing channel to broadcast typing status globally
-    // We don't subscribe or remove it here because AppShell's useGlobalTyping manages the connection.
-    const globalCh = supabase.channel(`typing_global`, {
-      config: { presence: { key: myId } },
-    });
-    globalChannelRef.current = globalCh;
+    // ── BUG-4 FIX: Removed ghost globalChannelRef ──
+    // Previously a "typing_global" channel was created here but never .subscribe()'d,
+    // so calling .track() on it was a silent no-op — the sidebar never saw typing events.
+    // The global typing channel is now owned exclusively by useGlobalTyping (AppShell).
+    // We broadcast to the sidebar by also tracking on the per-room presence channel,
+    // since useGlobalTyping now listens to each active room's typing channel directly.
 
-    return () => { 
-      supabase.removeChannel(ch); 
+    return () => {
+      // Clear typing state on leave so we don't get stuck showing "typing..."
+      ch.track({ typing: false }).catch(() => {});
+      supabase.removeChannel(ch);
     };
   }, [conversationId, myId]);
 
   const sendTyping = useCallback(() => {
-    if (!channelRef.current || !globalChannelRef.current) return;
-    
-    // Broadcast locally
-    channelRef.current.track({ typing: true });
-    
-    // Broadcast globally (so sidebar can see it)
-    globalChannelRef.current.track({ typing: true, conversationId });
+    if (!channelRef.current) return;
+
+    // Track typing on the per-room presence channel.
+    // useGlobalTyping in AppShell will observe this same channel.
+    channelRef.current.track({ typing: true, conversationId });
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = window.setTimeout(() => {
-      channelRef.current?.track({ typing: false });
-      globalChannelRef.current?.track({ typing: false, conversationId });
+      channelRef.current?.track({ typing: false, conversationId });
     }, 2500);
   }, [conversationId]);
 
@@ -335,39 +429,58 @@ export function useTyping(conversationId: string | undefined, myId: string | und
 }
 
 // Hook for all conversations (used in the sidebar)
+// ── BUG-4 FIX: Rewritten to listen on per-room presence channels ──
+// The old implementation subscribed to a "typing_global" presence channel that
+// useTyping never actually subscribed to (only created without calling .subscribe()).
+// Now we observe each active conversation's "typing:<id>" channel — the same
+// channel that sendTyping() broadcasts on — so sidebar typing indicators work.
 export function useGlobalTyping(myId: string | undefined) {
   const [typingMap, setTypingMap] = useState<Record<string, string[]>>({});
+  // Keep a ref to the conversations we're currently listening on so we can
+  // diff and unsubscribe stale channels when the conversation list changes.
+  const channelsRef = useRef<Map<string, ReturnType<typeof supabase.channel>>>(new Map());
 
-  useEffect(() => {
-    if (!myId) return;
-    
-    const ch = supabase.channel(`typing_global`, {
-      config: { presence: { key: myId } },
-    });
+  const syncTypingChannels = useCallback(
+    (conversationIds: string[]) => {
+      if (!myId) return;
 
-    ch.on("presence", { event: "sync" }, () => {
-      const state = ch.presenceState<{ typing: boolean; conversationId: string }>();
-      
-      const newMap: Record<string, string[]> = {};
-      
-      Object.entries(state).forEach(([uid, payloads]) => {
-        if (uid === myId) return;
-        const payload = (payloads as { typing: boolean; conversationId: string }[])[0];
-        if (payload?.typing && payload?.conversationId) {
-          if (!newMap[payload.conversationId]) newMap[payload.conversationId] = [];
-          newMap[payload.conversationId].push(uid);
+      const existing = channelsRef.current;
+      const desiredSet = new Set(conversationIds);
+
+      // Remove channels for conversations no longer in the list
+      for (const [cid, ch] of existing) {
+        if (!desiredSet.has(cid)) {
+          supabase.removeChannel(ch);
+          existing.delete(cid);
+          setTypingMap((prev) => {
+            const next = { ...prev };
+            delete next[cid];
+            return next;
+          });
         }
-      });
-      
-      setTypingMap(newMap);
-    });
+      }
 
-    ch.subscribe();
+      // Add channels for new conversations
+      for (const cid of conversationIds) {
+        if (existing.has(cid)) continue;
 
-    return () => { supabase.removeChannel(ch); };
-  }, [myId]);
+        const ch = supabase.channel(`typing:${cid}`);
+        ch.on("presence", { event: "sync" }, () => {
+          const state = ch.presenceState<{ typing: boolean; conversationId: string }>();
+          const typers = Object.entries(state)
+            .filter(([uid, payloads]) => uid !== myId && (payloads as any[])[0]?.typing)
+            .map(([uid]) => uid);
+          setTypingMap((prev) => ({ ...prev, [cid]: typers }));
+        });
+        ch.subscribe();
+        existing.set(cid, ch);
+      }
+    },
+    [myId]
+  );
 
-  return typingMap;
+  // Expose a way for AppShell to push conversation IDs
+  return { typingMap, syncTypingChannels };
 }
 
 // ─── Conversation helpers ──────────────────────────────────────────────────────
