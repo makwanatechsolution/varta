@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 export type ThemeMode = "system" | "light" | "dark" | "amoled" | "midnight";
 export type ChatWallpaper = "varta_dark" | "whatsapp_dark" | "telegram_night" | "amoled_pattern" | "light_paper" | "emerald_soft";
 export type FontSizeScale = "small" | "medium" | "large";
+export type TimeFormatMode = "12" | "24";
 
 interface SettingsState {
   theme: ThemeMode;
@@ -11,6 +12,7 @@ interface SettingsState {
   fontSize: FontSizeScale;
   enterToSend: boolean;
   soundAlerts: boolean;
+  timeFormat: TimeFormatMode;
   appLanguage: string;
   autoStart: boolean;
   autoUpdate: boolean;
@@ -25,6 +27,7 @@ interface SettingsContextValue extends SettingsState {
   setFontSize: (size: FontSizeScale) => void;
   setEnterToSend: (enabled: boolean) => void;
   setSoundAlerts: (enabled: boolean) => void;
+  setTimeFormat: (mode: TimeFormatMode) => void;
   setAppLanguage: (lang: string) => void;
   setAutoStart: (enabled: boolean) => void;
   setAutoUpdate: (enabled: boolean) => void;
@@ -65,6 +68,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   );
   const [soundAlerts, setSoundAlertsState] = useState<boolean>(
     () => localStorage.getItem("varta_sound_alerts") !== "false"
+  );
+  const [timeFormat, setTimeFormatState] = useState<TimeFormatMode>(
+    () => (localStorage.getItem("varta_time_format") as TimeFormatMode) || "24"
   );
   const [appLanguage, setAppLanguageState] = useState<string>(
     () => localStorage.getItem("varta_lang") || "English (US)"
@@ -149,6 +155,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("varta_sound_alerts", String(enabled));
   };
 
+  const setTimeFormat = (mode: TimeFormatMode) => {
+    setTimeFormatState(mode);
+    localStorage.setItem("varta_time_format", mode);
+  };
+
   const setAppLanguage = (lang: string) => {
     setAppLanguageState(lang);
     localStorage.setItem("varta_lang", lang);
@@ -183,6 +194,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         fontSize,
         enterToSend,
         soundAlerts,
+        timeFormat,
         appLanguage,
         autoStart,
         autoUpdate,
@@ -195,6 +207,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setFontSize,
         setEnterToSend,
         setSoundAlerts,
+        setTimeFormat,
         setAppLanguage,
         setAutoStart,
         setAutoUpdate,

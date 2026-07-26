@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import clsx from "clsx";
-import { format } from "date-fns";
 import { Smile, Reply, Edit2, Trash2, Phone, Video, Copy, Forward } from "lucide-react";
 import type { Message } from "../../types/database";
 import { useReactions, EmojiPickerPanel } from "../../hooks/useReactions";
 import { Avatar } from "../ui/Avatar";
 import { VoicePlayer } from "./VoicePlayer";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSettings } from "../../contexts/SettingsContext";
+import { formatChatTime } from "../../lib/time";
 
 interface MessageBubbleProps {
   message: Message;
@@ -18,6 +19,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: MessageBubbleProps) {
   const { toggleReaction } = useReactions(message.id);
+  const { timeFormat } = useSettings();
   const [showPicker, setShowPicker] = useState(false);
   const [showReactors, setShowReactors] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -54,7 +56,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
           )}
           <span>{message.content?.split("||")[0]}</span>
           <span className="text-border-subtle">·</span>
-          <span>{format(new Date(message.created_at), "HH:mm")}</span>
+          <span>{formatChatTime(message.created_at, timeFormat)}</span>
         </div>
       </motion.div>
     );
@@ -125,9 +127,9 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
           )}
 
-          <div className="mt-1 flex items-center justify-end gap-1.5">
+          <div className="mt-1 flex flex-wrap items-center justify-end gap-1.5">
             {message.is_edited && <span className="text-[10px] font-medium opacity-60">edited</span>}
-            <span className="text-[10px] font-medium opacity-70">{format(new Date(message.created_at), "HH:mm")}</span>
+            <span className="text-[10px] font-medium opacity-70 whitespace-nowrap">{formatChatTime(message.created_at, timeFormat)}</span>
             {isOwn && (
               <span className="text-white opacity-80" title="Read">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

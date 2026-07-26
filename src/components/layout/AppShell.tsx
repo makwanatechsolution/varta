@@ -12,6 +12,8 @@ import { StoryBar, StoryViewer } from "../stories/StoryViewer";
 import type { StatusStory, Conversation } from "../../types/database";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
+import { useSettings } from "../../contexts/SettingsContext";
+import { formatChatTime } from "../../lib/time";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,7 @@ export function AppShell() {
   const [viewerStories, setViewerStories] = useState<StatusStory[] | null>(null);
   const [search, setSearch] = useState("");
   const [lastReadMap, setLastReadMap] = useState<Record<string, string>>(getLastReadMap);
+  const { timeFormat } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -294,13 +297,13 @@ export function AppShell() {
                   size="md"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex justify-between items-baseline">
+                  <div className="flex justify-between items-start gap-2">
                     <p className="truncate font-semibold text-[14px]" style={{ color: "var(--text-main)" }}>
                       {title}
                     </p>
                     {conv.last_message_at && (
-                      <span className="text-[11px] shrink-0 ml-2" style={{ color: "var(--text-muted)" }}>
-                        {new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      <span className="shrink-0 text-[11px] whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
+                        {formatChatTime(conv.last_message_at, timeFormat)}
                       </span>
                     )}
                   </div>

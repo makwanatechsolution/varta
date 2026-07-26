@@ -978,6 +978,8 @@ function ChatsSettingsPane() {
     setFontSize,
     chatWallpaper,
     setChatWallpaper,
+    timeFormat,
+    setTimeFormat,
   } = useSettings();
 
   return (
@@ -1016,6 +1018,24 @@ function ChatsSettingsPane() {
             <option value="medium">Medium (15px)</option>
             <option value="large">Large (17px)</option>
           </select>
+        </div>
+
+        <div className="flex flex-col gap-3 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Chat Time Format</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Choose how timestamps appear in chats and conversation lists</p>
+            </div>
+            <select
+              value={timeFormat}
+              onChange={(e) => setTimeFormat(e.target.value as "12" | "24")}
+              className="rounded-xl border px-4 py-2 text-xs outline-none min-w-[120px]"
+              style={{ backgroundColor: "var(--input-bg)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
+            >
+              <option value="24">24-hour (14:30)</option>
+              <option value="12">12-hour (2:30 PM)</option>
+            </select>
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
