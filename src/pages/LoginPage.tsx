@@ -11,11 +11,26 @@ export function LoginPage() {
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
   const [pairingToken, setPairingToken] = useState("");
   const [qrStatusText, setQrStatusText] = useState("Waiting for QR scan...");
+  const [qrSvgMarkup, setQrSvgMarkup] = useState("");
 
   useEffect(() => {
     if (activeTab === "qr" && !pairingToken) {
       setPairingToken(Math.random().toString(36).substring(2, 8).toUpperCase());
     }
+  }, [activeTab, pairingToken]);
+
+  useEffect(() => {
+    if (activeTab !== "qr" || !pairingToken) return;
+
+    let cancelled = false;
+    const payload = `${window.location.origin}/login?pair=${pairingToken}`;
+    generateQRCodeSVG(payload, { size: 220, fgColor: "#0b141a" }).then((svg) => {
+      if (!cancelled) setQrSvgMarkup(svg);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, pairingToken]);
 
   // Realtime Broadcast channel listener for QR Code Login
@@ -357,12 +372,7 @@ export function LoginPage() {
               <div className="p-4 bg-white rounded-2xl shadow-xl flex items-center justify-center relative">
                 <div
                   className="w-48 h-48 flex items-center justify-center"
-                  dangerouslySetInnerHTML={{
-                    __html: generateQRCodeSVG(
-                      `${window.location.origin}/join?pair=${pairingToken}`,
-                      { size: 220, fgColor: "#0b141a" }
-                    ),
-                  }}
+                  dangerouslySetInnerHTML={{ __html: qrSvgMarkup }}
                 />
               </div>
               <div>

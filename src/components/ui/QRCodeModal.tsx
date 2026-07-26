@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { X, Copy, Download, Check, Sparkles, UserPlus } from "lucide-react";
 import { Avatar } from "./Avatar";
@@ -16,10 +16,23 @@ export function QRCodeModal({ profile, onClose }: QRCodeModalProps) {
   const [connectInput, setConnectInput] = useState("");
   const [connectError, setConnectError] = useState("");
   const [activeTab, setActiveTab] = useState<"my-code" | "scan">("my-code");
+  const [qrSvgMarkup, setQrSvgMarkup] = useState("");
   const navigate = useNavigate();
 
-  const profileUrl = `${window.location.origin}/?user=${profile?.id || ""}`;
-  const qrSvgMarkup = useMemo(() => generateQRCodeSVG(profileUrl, { size: 280, fgColor: "#0b141a" }), [profileUrl]);
+  const profileUrl = useMemo(() => {
+    if (!profile?.id) return `${window.location.origin}/login`;
+    return `${window.location.origin}/new-chat?connect=${encodeURIComponent(profile.id)}`;
+  }, [profile?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    generateQRCodeSVG(profileUrl, { size: 280, fgColor: "#0b141a" }).then((svg) => {
+      if (!cancelled) setQrSvgMarkup(svg);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileUrl]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(profileUrl);
@@ -45,15 +58,24 @@ export function QRCodeModal({ profile, onClose }: QRCodeModalProps) {
   const handleConnect = () => {
     if (!connectInput.trim()) return;
     const text = connectInput.trim();
-    // Extract ID or username from URL or raw text
     let target = text;
-    if (text.includes("user=")) {
-      target = text.split("user=")[1]?.split("&")[0] || text;
+
+    try {
+      const parsed = new URL(text);
+      const candidate = parsed.searchParams.get("connect") || parsed.searchParams.get("user") || parsed.searchParams.get("id") || parsed.pathname;
+      target = candidate || text;
+    } catch {
+      if (text.includes("connect=")) {
+        target = text.split("connect=")[1]?.split("&")[0] || text;
+      } else if (text.includes("user=")) {
+        target = text.split("user=")[1]?.split("&")[0] || text;
+      }
     }
 
-    if (target) {
+    const normalized = decodeURIComponent(target).trim();
+    if (normalized) {
       onClose();
-      navigate(`/new-chat?connect=${encodeURIComponent(target)}`);
+      navigate(`/new-chat?connect=${encodeURIComponent(normalized)}`);
     } else {
       setConnectError("Invalid QR link or User ID.");
     }

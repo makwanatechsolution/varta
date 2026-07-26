@@ -1384,9 +1384,17 @@ function DevicesSettingsPane() {
 
   const broadcastPairing = async (targetCode: string) => {
     let cleanCode = targetCode.trim();
-    if (cleanCode.includes("pair=")) {
-      cleanCode = cleanCode.split("pair=")[1]?.split("&")[0] || cleanCode;
+
+    try {
+      const parsed = new URL(targetCode);
+      const candidate = parsed.searchParams.get("pair") || parsed.searchParams.get("token") || parsed.pathname;
+      cleanCode = candidate || targetCode;
+    } catch {
+      if (targetCode.includes("pair=")) {
+        cleanCode = targetCode.split("pair=")[1]?.split("&")[0] || targetCode;
+      }
     }
+
     cleanCode = cleanCode.toUpperCase();
     if (!cleanCode) return;
 
