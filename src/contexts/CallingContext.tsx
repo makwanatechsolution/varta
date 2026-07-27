@@ -351,7 +351,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
             try {
               new Notification(`Incoming Call from ${initiatorProfile?.display_name || "Someone"}`, {
                 body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-                icon: initiatorProfile?.avatar_url || "/favicon.svg",
+                icon: initiatorProfile?.avatar_url || "/logo.svg",
                 requireInteraction: true,
               });
             } catch (e) {}
@@ -381,7 +381,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
             try {
               new Notification(`Incoming Call from ${initiatorProfile?.display_name || "Someone"}`, {
                 body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-                icon: initiatorProfile?.avatar_url || "/favicon.svg",
+                icon: initiatorProfile?.avatar_url || "/logo.svg",
                 requireInteraction: true,
               });
             } catch (e) {}
@@ -445,7 +445,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
             try {
               const notif = new Notification(`Incoming Call from ${callerName}`, {
                 body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-                icon: initiatorProfile?.avatar_url || "/favicon.svg",
+                icon: initiatorProfile?.avatar_url || "/logo.svg",
                 tag: `call-${call.id}`,
                 requireInteraction: true,
               });

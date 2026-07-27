@@ -220,26 +220,56 @@ export function ChatRoomPage() {
     await sendMessage("", "gif", { gif_url: gif.url, media_url: gif.url });
   };
 
+  const uploadMediaAndSend = async (file: Blob, opts?: { fileName?: string; forceType?: Message["type"] }) => {
+    if (!user || !id) return;
+
+    const inferredType = opts?.forceType
+      ?? ((file.type || "").startsWith("video/") ? "video" : (file.type || "").startsWith("audio/") ? "audio" : "image");
+    const extFromName = opts?.fileName?.split(".").pop()?.toLowerCase();
+    const extFromMime = (file.type || "").split("/")[1]?.split(";")[0]?.toLowerCase();
+    const ext = extFromName || extFromMime || (inferredType === "video" ? "mp4" : inferredType === "audio" ? "webm" : "png");
+    const base = inferredType === "audio" ? "audio" : inferredType;
+    const path = `chat/${id}/${base}_${Date.now()}.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from("media")
+      .upload(path, file, { upsert: true, contentType: file.type || undefined });
+
+    if (error || !data) {
+      console.error("Media upload failed:", error);
+      const msg = (error as any)?.message || "Upload failed";
+      if (msg.toLowerCase().includes("row-level security") || msg.toLowerCase().includes("unauthorized")) {
+        alert("Upload blocked by storage permissions. Please apply the latest Supabase migration and retry.");
+      }
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
+    await sendMessage("", inferredType, { media_url: urlData.publicUrl });
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !id) return;
-    const ext = file.name.split(".").pop();
-    const path = `chat/${id}/${Date.now()}.${ext}`;
-    const { data, error } = await supabase.storage.from("media").upload(path, file, { upsert: true });
-    if (error || !data) return;
-    const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
-    const isVideo = file.type.startsWith("video/");
-    await sendMessage("", isVideo ? "video" : "image", { media_url: urlData.publicUrl });
+    if (!file) return;
+    await uploadMediaAndSend(file, { fileName: file.name });
     e.target.value = "";
   };
 
   const handleVoiceSend = async (blob: Blob) => {
-    if (!user || !id) return;
-    const path = `chat/${id}/audio_${Date.now()}.webm`;
-    const { data, error } = await supabase.storage.from("media").upload(path, blob, { upsert: true });
-    if (error || !data) return;
-    const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
-    await sendMessage("", "audio", { media_url: urlData.publicUrl });
+    await uploadMediaAndSend(blob, { fileName: `voice_${Date.now()}.webm`, forceType: "audio" });
+  };
+
+  const handleComposerPaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (editingMsg) return;
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+
+    const pastedImage = imageItem.getAsFile();
+    if (!pastedImage) return;
+
+    e.preventDefault();
+    await uploadMediaAndSend(pastedImage, { fileName: `pasted_${Date.now()}.png`, forceType: "image" });
   };
 
   const startEdit = (msg: Message) => {
@@ -494,6 +524,7 @@ export function ChatRoomPage() {
                   if (editingMsg) setEditText(e.target.value);
                   else { setText(e.target.value); sendTyping(); }
                 }}
+                onPaste={handleComposerPaste}
                 onKeyDown={(e) => {
                   if (enterToSend) {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }

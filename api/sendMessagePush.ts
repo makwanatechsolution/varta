@@ -47,11 +47,16 @@ export default async function handler(req: any, res: any) {
       return res.json({ sent: 0 });
     }
 
+    const uniqueTokens = Array.from(new Set(tokens.map((t: any) => t.token).filter(Boolean)));
+    if (!uniqueTokens.length) {
+      return res.json({ sent: 0 });
+    }
+
     const title = senderName ? `${senderName}` : "New message";
     const body = preview ?? "You have a new message";
 
     const result = await getMessaging().sendEachForMulticast({
-      tokens: tokens.map((t: any) => t.token),
+      tokens: uniqueTokens,
       notification: { title, body },
       data: {
         title,
@@ -59,14 +64,14 @@ export default async function handler(req: any, res: any) {
         conversationId,
         type: "message",
         click_action: `/chat`,
-        icon: `/favicon.svg`,
+        icon: `/logo.svg`,
       },
       webpush: {
         notification: {
           title,
           body,
-          icon: `/favicon.svg`,
-          badge: `/favicon.svg`,
+          icon: `/logo.svg`,
+          badge: `/logo.svg`,
         },
         fcmOptions: {
           link: `/chat`,

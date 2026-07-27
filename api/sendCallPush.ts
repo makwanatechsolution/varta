@@ -45,18 +45,35 @@ export default async function handler(req: any, res: any) {
       return res.json({ sent: 0 });
     }
 
+    const uniqueTokens = Array.from(new Set(tokens.map((t: any) => t.token).filter(Boolean)));
+    if (!uniqueTokens.length) {
+      return res.json({ sent: 0 });
+    }
+
     const title = `Incoming ${callType === "video" ? "Video" : "Voice"} Call`;
     const body = `${initiatorName || "Someone"} is calling you on Varta...`;
 
     const result = await getMessaging().sendEachForMulticast({
-      tokens: tokens.map((t: any) => t.token),
+      tokens: uniqueTokens,
       notification: { title, body },
       data: {
         callId,
         conversationId: conversationId || "",
         type: "incoming_call",
         callType: callType || "voice",
+        icon: "/logo.svg",
         click_action: conversationId ? `/chat/${conversationId}` : "/calls",
+      },
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: "/logo.svg",
+          badge: "/logo.svg",
+        },
+        fcmOptions: {
+          link: conversationId ? `/chat/${conversationId}` : "/calls",
+        },
       },
     });
 

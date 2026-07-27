@@ -32,18 +32,19 @@ const firebaseConfig = {
 if (firebaseConfig.apiKey) {
   firebase.initializeApp(firebaseConfig);
   const messaging = firebase.messaging();
+  const VARTA_ICON = `${self.location.origin}/logo.svg`;
 
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
     const title = payload.notification?.title || payload.data?.title || payload.data?.senderName || 'Varta';
     const body = payload.notification?.body || payload.data?.body || payload.data?.preview || 'New message received';
-    const icon = payload.notification?.icon || payload.data?.icon || `${self.location.origin}/favicon.svg`;
+    const icon = payload.notification?.icon || payload.data?.icon || VARTA_ICON;
 
     const notificationOptions = {
       body: body,
       icon: icon,
-      badge: `${self.location.origin}/favicon.svg`,
+      badge: VARTA_ICON,
       tag: payload.data?.conversationId || 'varta-push',
       data: payload.data || {},
     };
@@ -52,33 +53,9 @@ if (firebaseConfig.apiKey) {
   });
 }
 
-// Fallback native Push event listener
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  try {
-    const payload = event.data.json();
-    console.log('[firebase-messaging-sw.js] Native push event received: ', payload);
-
-    const title = payload.notification?.title || payload.data?.title || payload.data?.senderName || 'Varta';
-    const body = payload.notification?.body || payload.data?.body || payload.data?.preview || 'New message received';
-    const icon = payload.notification?.icon || payload.data?.icon || `${self.location.origin}/favicon.svg`;
-
-    const notificationOptions = {
-      body: body,
-      icon: icon,
-      badge: `${self.location.origin}/favicon.svg`,
-      tag: payload.data?.conversationId || 'varta-push',
-      data: payload.data || {},
-    };
-
-    event.waitUntil(
-      self.registration.showNotification(title, notificationOptions)
-    );
-  } catch (err) {
-    console.warn('[firebase-messaging-sw.js] Could not parse push payload as JSON:', err);
-  }
-});
+// Note: We intentionally do NOT add a native `push` fallback listener here.
+// FCM already invokes `onBackgroundMessage` for these payloads, and registering
+// both handlers causes duplicate browser notifications.
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
