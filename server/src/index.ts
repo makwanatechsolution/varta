@@ -445,7 +445,7 @@ app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
 
 // POST /api/conversations/:id/messages
 app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
-  const convId = req.params.id;
+  const convId = req.params.id as string;
   const myId = uid(req);
   const { content, type = "text", media_url, gif_url, reply_to_id } = req.body;
 
