@@ -15,6 +15,10 @@ on:
 jobs:
   execute-kill-switch:
     runs-on: ubuntu-latest
+    env:
+      GCP_VM_IP: ${{ secrets.GCP_VM_IP }}
+      GCP_SSH_PRIVATE_KEY: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
     steps:
       - name: Validate Confirmation
         run: |
@@ -24,7 +28,7 @@ jobs:
           fi
 
       - name: Setup SSH Key
-        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
+        if: env.GCP_VM_IP != '' && env.GCP_SSH_PRIVATE_KEY != ''
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
@@ -32,13 +36,13 @@ jobs:
           ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
 
       - name: Step 1 - Take Mandatory Safe Harbor Backup
-        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
+        if: env.GCP_VM_IP != '' && env.GCP_SSH_PRIVATE_KEY != ''
         run: |
           echo "Executing pre-destruction backup on GCP VM..."
           ssh -o ConnectTimeout=10 ubuntu@${{ secrets.GCP_VM_IP }} "sudo -E /opt/varta/scripts/backup.sh" || true
 
       - name: Step 2 - Retrieve Backup Artifact to GitHub
-        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
+        if: env.GCP_VM_IP != '' && env.GCP_SSH_PRIVATE_KEY != ''
         id: retrieve_backup
         run: |
           LATEST_BACKUP=$(ssh -o ConnectTimeout=10 ubuntu@${{ secrets.GCP_VM_IP }} "ls -t /opt/varta/backups/varta_backup_*.tar.gz 2>/dev/null | head -n 1" || true)
@@ -60,23 +64,23 @@ jobs:
           retention-days: 90
 
       - name: Step 4 - Trigger Kill Switch on VM
-        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
+        if: env.GCP_VM_IP != '' && env.GCP_SSH_PRIVATE_KEY != ''
         run: |
           echo "Executing kill switch script on GCP VM..."
           ssh -o ConnectTimeout=10 ubuntu@${{ secrets.GCP_VM_IP }} "sudo /opt/varta/scripts/kill_switch.sh '${{ github.event.inputs.reason }}'" || true
 
       - name: Step 5 - GCP Cloud API Instance Termination Guardrail
-        if: secrets.GCP_SA_KEY != ''
+        if: env.GCP_SA_KEY != ''
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        if: secrets.GCP_SA_KEY != ''
+        if: env.GCP_SA_KEY != ''
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Force Terminate GCP VM and Persistent Disks
-        if: secrets.GCP_SA_KEY != ''
+        if: env.GCP_SA_KEY != ''
         continue-on-error: true
         run: |
           echo "Terminating GCP Compute Engine instance and deleting all attached disks via API..."

@@ -8,20 +8,23 @@ on:
 jobs:
   check-gcp-spend:
     runs-on: ubuntu-latest
+    env:
+      GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      GCP_BILLING_ACCOUNT_ID: ${{ secrets.GCP_BILLING_ACCOUNT_ID }}
     steps:
       - name: Authenticate to Google Cloud
-        if: secrets.GCP_SA_KEY != ''
+        if: env.GCP_SA_KEY != ''
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup Google Cloud SDK
-        if: secrets.GCP_SA_KEY != ''
+        if: env.GCP_SA_KEY != ''
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Query Billed Spend & Budgets
         id: query_cost
-        if: secrets.GCP_SA_KEY != '' && secrets.GCP_BILLING_ACCOUNT_ID != ''
+        if: env.GCP_SA_KEY != '' && env.GCP_BILLING_ACCOUNT_ID != ''
         run: |
           echo "Querying Google Cloud Billing Budgets..."
           BUDGET_JSON=$(gcloud billing budgets list --billing-account="${{ secrets.GCP_BILLING_ACCOUNT_ID }}" --format=json 2>/dev/null || echo "[]")
