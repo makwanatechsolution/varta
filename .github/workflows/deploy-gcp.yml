@@ -44,7 +44,7 @@ jobs:
           VITE_APP_URL: ${{ secrets.APP_URL }}
 
       - name: Setup SSH Key
-        if: ${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}
+        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
@@ -52,7 +52,7 @@ jobs:
           ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
 
       - name: Sync Application Files to GCP VM
-        if: ${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}
+        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
         run: |
           ssh ubuntu@${{ secrets.GCP_VM_IP }} "sudo mkdir -p /opt/varta && sudo chown -R ubuntu:ubuntu /opt/varta"
           rsync -avz --delete \
@@ -62,7 +62,7 @@ jobs:
             ./ ubuntu@${{ secrets.GCP_VM_IP }}:/opt/varta/
 
       - name: Write .env on GCP VM & Deploy
-        if: ${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}
+        if: secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != ''
         run: |
           ssh ubuntu@${{ secrets.GCP_VM_IP }} "bash -s" << 'ENDSSH'
             set -e
@@ -109,7 +109,7 @@ jobs:
           ENDSSH
 
       - name: Setup Let's Encrypt SSL (if domain configured)
-        if: ${{ secrets.GCP_VM_IP != '' && secrets.APP_DOMAIN != '' }}
+        if: secrets.GCP_VM_IP != '' && secrets.APP_DOMAIN != ''
         run: |
           ssh ubuntu@${{ secrets.GCP_VM_IP }} "
             if ! which certbot > /dev/null 2>&1; then
@@ -131,7 +131,7 @@ jobs:
           " || true
 
       - name: Verify Service Health
-        if: ${{ secrets.GCP_VM_IP != '' }}
+        if: secrets.GCP_VM_IP != ''
         run: |
           sleep 15
           curl --fail --retry 5 --retry-delay 5 \
