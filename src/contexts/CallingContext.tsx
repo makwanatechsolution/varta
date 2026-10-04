@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "../lib/supabase";
+import { vartaWS } from "../lib/ws";
+import { callsApi, messagesApi } from "../lib/api";
 import { useAuth } from "./AuthContext";
 import { callAudio } from "../lib/audio";
 import type { Call, CallType, CallStatus, Profile } from "../types/database";
@@ -107,6 +108,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
   const reconnectTimerRef = useRef<number | null>(null);
   const originalTitleRef = useRef<string>(document.title);
   const titleFlashIntervalRef = useRef<number | null>(null);
+  const signalUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
   useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
@@ -172,11 +174,10 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
 
     pc.onicecandidate = async (event) => {
       if (event.candidate && user) {
-        await supabase.from("call_signals").insert({
-          call_id: callId,
-          from_user_id: user.id,
+        await callsApi.sendSignal(callId, {
+          to_user_id: "", // broadcast to all call participants
           signal_type: "ice-candidate",
-          payload: event.candidate.toJSON() as unknown as import("../types/database").Json,
+          payload: event.candidate.toJSON(),
         });
       }
     };
@@ -211,20 +212,16 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
         const now = new Date();
         setConnectedAt(now);
 
-        // Update database with answered timestamp if caller/answerer
         if (activeCallRef.current?.id) {
-          supabase
-            .from("calls")
-            .update({ status: "active", answered_at: now.toISOString() })
-            .eq("id", activeCallRef.current.id)
-            .then();
+          callsApi.update(activeCallRef.current.id, {
+            status: "active",
+            answered_at: now.toISOString(),
+          });
         }
       } else if (state === "disconnected" || state === "failed") {
         setCallStatus("reconnecting");
-        // Attempt ICE restart
-        try { pc.restartIce(); } catch (e) {}
+        try { pc.restartIce(); } catch (e) { /* ignore */ }
 
-        // Set 15s reconnection timeout
         if (!reconnectTimerRef.current) {
           reconnectTimerRef.current = window.setTimeout(() => {
             console.warn("Reconnection timeout reached (15s). Ending call.");
@@ -238,12 +235,13 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
     return pc;
   }, [user, stopTitleFlashing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Signal listener (Offer, Answer, ICE, Hangup, Busy) ───────────────────
+  // ─── Signal listener via WebSocket ─────────────────────────────────────────
   const subscribeToSignals = useCallback((callId: string, role: "initiator" | "answerer") => {
-    const channel = supabase.channel(`call_signals:${callId}`);
+    // Unsubscribe previous
+    if (signalUnsubRef.current) signalUnsubRef.current();
 
-    const processSignal = async (sig: { signal_type: string; from_user_id: string; payload: any }) => {
-      if (sig.from_user_id === user?.id) return;
+    const processSignal = async (sig: any) => {
+      if (sig.from_user_id === user?.uid) return;
       const pc = pcRef.current;
       if (!pc) return;
 
@@ -252,18 +250,10 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
         await flushPendingIceCandidates(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
-        channel.send({
-          type: "broadcast",
-          event: "webrtc_signal",
-          payload: { signal_type: "answer", from_user_id: user!.id, payload: answer },
-        });
-
-        await supabase.from("call_signals").insert({
-          call_id: callId,
-          from_user_id: user!.id,
+        await callsApi.sendSignal(callId, {
+          to_user_id: sig.from_user_id,
           signal_type: "answer",
-          payload: answer as unknown as import("../types/database").Json,
+          payload: answer,
         });
       }
 
@@ -295,31 +285,13 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
 
       if (sig.signal_type === "hangup") {
         callAudio.playCallEnded();
-        setTimeout(() => {
-          clearCallState();
-        }, 1000);
+        setTimeout(() => { clearCallState(); }, 1000);
       }
     };
 
-    channel
-      .on("broadcast", { event: "webrtc_signal" }, async ({ payload }) => {
-        await processSignal(payload);
-      })
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "call_signals",
-          filter: `call_id=eq.${callId}`,
-        },
-        async (payload) => {
-          await processSignal(payload.new as any);
-        },
-      )
-      .subscribe();
-
-    return channel;
+    const unsub = vartaWS.on(`call_signals:${callId}`, "signal", processSignal);
+    signalUnsubRef.current = unsub;
+    return unsub;
   }, [user, flushPendingIceCandidates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Incoming Call Global Listener ─────────────────────────────────────────
@@ -330,185 +302,85 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       Notification.requestPermission().catch(() => {});
     }
 
-    const directChannel = supabase.channel(`varta_direct_calls:${user.id}`);
-    directChannel
-      .on(
-        "broadcast",
-        { event: "incoming_call" },
-        async ({ payload }) => {
-          const { call, initiatorProfile } = payload || {};
-          if (!call || call.initiator_id === user.id) return;
-          if (callStatusRef.current && ["calling", "ringing", "connecting", "connected", "active"].includes(callStatusRef.current)) return;
+    const handleIncomingCall = async (payload: any) => {
+      const { call, initiatorProfile } = payload || {};
+      if (!call || call.initiator_id === user.uid) return;
+      if (callStatusRef.current && ["calling", "ringing", "connecting", "connected", "active"].includes(callStatusRef.current)) {
+        // Busy — send busy signal
+        await callsApi.update(call.id, { status: "declined", ended_at: new Date().toISOString() });
+        await callsApi.sendSignal(call.id, {
+          to_user_id: call.initiator_id,
+          signal_type: "busy",
+          payload: {},
+        });
+        return;
+      }
 
-          setOtherParticipant(initiatorProfile as Profile);
-          setIncomingCall(call);
-          setCallStatus("ringing");
+      setOtherParticipant(initiatorProfile as Profile);
+      setIncomingCall(call);
+      setCallStatus("ringing");
+      callAudio.playIncomingRing();
+      startTitleFlashing(initiatorProfile?.display_name || "Someone");
 
-          callAudio.playIncomingRing();
-          startTitleFlashing(initiatorProfile?.display_name || "Someone");
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          const notif = new Notification(`Incoming Call from ${initiatorProfile?.display_name || "Someone"}`, {
+            body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
+            icon: initiatorProfile?.avatar_url || "/favicon.svg",
+            tag: `call-${call.id}`,
+            requireInteraction: true,
+          });
+          notif.onclick = () => { window.focus(); notif.close(); };
+        } catch (e) { /* ignore */ }
+      }
 
-          if ("Notification" in window && Notification.permission === "granted") {
-            try {
-              new Notification(`Incoming Call from ${initiatorProfile?.display_name || "Someone"}`, {
-                body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-                icon: initiatorProfile?.avatar_url || "/logo.svg",
-                requireInteraction: true,
-              });
-            } catch (e) {}
-          }
-        }
-      )
-      .subscribe();
-
-    const channel = supabase
-      .channel(`calls_incoming:${user.id}`)
-      .on(
-        "broadcast",
-        { event: "incoming_call" },
-        async ({ payload }) => {
-          const { call, initiatorProfile } = payload || {};
-          if (!call || call.initiator_id === user.id) return;
-          if (callStatusRef.current && ["calling", "ringing", "connecting", "connected", "active"].includes(callStatusRef.current)) return;
-
-          setOtherParticipant(initiatorProfile as Profile);
-          setIncomingCall(call);
-          setCallStatus("ringing");
-
-          callAudio.playIncomingRing();
-          startTitleFlashing(initiatorProfile?.display_name || "Someone");
-
-          if ("Notification" in window && Notification.permission === "granted") {
-            try {
-              new Notification(`Incoming Call from ${initiatorProfile?.display_name || "Someone"}`, {
-                body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-                icon: initiatorProfile?.avatar_url || "/logo.svg",
-                requireInteraction: true,
-              });
-            } catch (e) {}
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "calls" },
-        async (payload) => {
-          const call = payload.new as Call;
-          if (call.initiator_id === user.id) return;
-
-          // Check membership
-          let isMember = false;
+      // 30-Second Timeout for auto-missed call
+      if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
+      ringTimerRef.current = window.setTimeout(async () => {
+        if (callStatusRef.current === "ringing") {
+          callAudio.stop();
+          callAudio.playMissedCall();
+          stopTitleFlashing();
+          await callsApi.update(call.id, { status: "missed", ended_at: new Date().toISOString() });
           if (call.conversation_id) {
-            const { data: member } = await supabase
-              .from("conversation_members")
-              .select("id")
-              .eq("conversation_id", call.conversation_id)
-              .eq("user_id", user.id)
-              .maybeSingle();
-            if (member) isMember = true;
+            await _insertCallLog(call.conversation_id, call.id, "missed", call.type);
           }
+          setIncomingCall(null);
+          setCallStatus(null);
+        }
+      }, RING_TIMEOUT_MS);
+    };
 
-          if (!isMember) return;
-
-          // Fetch initiator profile
-          const { data: initiatorProfile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", call.initiator_id)
-            .single();
-
-          const callerName = initiatorProfile?.display_name || "Someone";
-          setOtherParticipant(initiatorProfile as Profile);
-
-          // If current user is ALREADY in an active/ringing call, reply busy!
-          if (callStatusRef.current && ["calling", "ringing", "connecting", "connected", "active"].includes(callStatusRef.current)) {
-            await supabase.from("calls").update({ status: "declined", ended_at: new Date().toISOString() }).eq("id", call.id);
-            await supabase.from("call_signals").insert({
-              call_id: call.id,
-              from_user_id: user.id,
-              signal_type: "busy",
-              payload: {},
-            });
-            return;
-          }
-
-          setIncomingCall(call);
-          setCallStatus("ringing");
-
-          // Play incoming ringtone
-          callAudio.playIncomingRing();
-
-          // Flashing tab title
-          startTitleFlashing(callerName);
-
-          // Desktop Web Notification
-          if ("Notification" in window && Notification.permission === "granted") {
-            try {
-              const notif = new Notification(`Incoming Call from ${callerName}`, {
-                body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-                icon: initiatorProfile?.avatar_url || "/logo.svg",
-                tag: `call-${call.id}`,
-                requireInteraction: true,
-              });
-              notif.onclick = () => {
-                window.focus();
-                notif.close();
-              };
-            } catch (e) {
-              console.warn("Notification trigger failed", e);
-            }
-          }
-
-          // 30-Second Timeout for auto-missed call
+    const handleCallUpdate = (payload: any) => {
+      const updated = payload as Call;
+      if (incomingCall && incomingCall.id === updated.id) {
+        if (["ended", "declined", "missed"].includes(updated.status)) {
+          callAudio.stop();
+          stopTitleFlashing();
           if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
-          ringTimerRef.current = window.setTimeout(async () => {
-            if (callStatusRef.current === "ringing") {
-              callAudio.stop();
-              callAudio.playMissedCall();
-              stopTitleFlashing();
+          setIncomingCall(null);
+          setCallStatus(null);
+        }
+      } else if (activeCallRef.current && activeCallRef.current.id === updated.id) {
+        if (updated.status === "busy") {
+          callAudio.stop();
+          callAudio.playBusyTone();
+          setCallStatus("busy");
+        } else if (updated.status === "declined") {
+          callAudio.stop();
+          callAudio.playCallEnded();
+          setCallStatus("declined");
+          setTimeout(() => clearCallState(), 2000);
+        }
+      }
+    };
 
-              await supabase.from("calls").update({ status: "missed", ended_at: new Date().toISOString() }).eq("id", call.id);
-              if (call.conversation_id) {
-                await _insertCallLog(call.conversation_id, call.id, "missed", call.type);
-              }
-
-              setIncomingCall(null);
-              setCallStatus(null);
-            }
-          }, RING_TIMEOUT_MS);
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "calls" },
-        (payload) => {
-          const updated = payload.new as Call;
-          if (incomingCall && incomingCall.id === updated.id) {
-            if (updated.status === "ended" || updated.status === "declined" || updated.status === "missed") {
-              callAudio.stop();
-              stopTitleFlashing();
-              if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
-              setIncomingCall(null);
-              setCallStatus(null);
-            }
-          } else if (activeCallRef.current && activeCallRef.current.id === updated.id) {
-            if (updated.status === "busy") {
-              callAudio.stop();
-              callAudio.playBusyTone();
-              setCallStatus("busy");
-            } else if (updated.status === "declined") {
-              callAudio.stop();
-              callAudio.playCallEnded();
-              setCallStatus("declined");
-              setTimeout(() => clearCallState(), 2000);
-            }
-          }
-        },
-      )
-      .subscribe();
+    const unsub1 = vartaWS.on(`calls:${user.uid}`, "incoming_call", handleIncomingCall);
+    const unsub2 = vartaWS.on(`calls:${user.uid}`, "call_updated", handleCallUpdate);
 
     return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(directChannel);
+      unsub1();
+      unsub2();
     };
   }, [user, startTitleFlashing, stopTitleFlashing]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -516,10 +388,8 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
   const startCall = async (conversationId: string, type: CallType = "voice", targetUser?: Profile) => {
     if (!user) return;
     callAudio.stop();
-
     if (targetUser) setOtherParticipant(targetUser);
 
-    // Acquire stream
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -529,34 +399,12 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       setIsVideoOff(type !== "video");
       setIsMuted(false);
 
-      // Check if target recipient is online / busy in DB
-      if (targetUser?.id) {
-        const { data: activeCalls } = await supabase
-          .from("calls")
-          .select("id")
-          .eq("initiator_id", targetUser.id)
-          .in("status", ["ringing", "active"]);
-
-        if (activeCalls && activeCalls.length > 0) {
-          callAudio.playBusyTone();
-          setCallStatus("busy");
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-      }
-
-      // Insert Call record
-      const { data: call, error } = await supabase
-        .from("calls")
-        .insert({
-          conversation_id: conversationId,
-          initiator_id: user.id,
-          type,
-          status: "ringing",
-          started_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      // Create call record on backend
+      const { data: call, error } = await callsApi.create({
+        conversation_id: conversationId,
+        type,
+        participant_ids: targetUser ? [targetUser.id] : [],
+      });
 
       if (error || !call) {
         stream.getTracks().forEach((t) => t.stop());
@@ -566,58 +414,32 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       setActiveCall(call as Call);
       setCallStatus("calling");
 
-      await supabase.from("call_participants").insert({ call_id: call.id, user_id: user.id });
-
-      const pc = await createPeerConnection(call.id);
+      const pc = await createPeerConnection((call as Call).id);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      subscribeToSignals(call.id, "initiator");
+      subscribeToSignals((call as Call).id, "initiator");
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Play custom Varta Outgoing Ringtone
       callAudio.playOutgoingRing();
 
-      // Dispatch direct WebSocket broadcast for 0-latency instant ringing on recipient device
-      if (targetUser?.id) {
-        const broadcastChannel = supabase.channel(`varta_direct_calls:${targetUser.id}`);
-        broadcastChannel.subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            broadcastChannel.send({
-              type: "broadcast",
-              event: "incoming_call",
-              payload: {
-                call,
-                initiatorProfile: {
-                  id: user.id,
-                  display_name: user.user_metadata?.display_name || user.email || "Varta User",
-                  avatar_url: user.user_metadata?.avatar_url || null,
-                },
-              },
-            }).then(() => {
-              supabase.removeChannel(broadcastChannel);
-            });
-          }
-        });
-      }
-
-      await supabase.from("call_signals").insert({
-        call_id: call.id,
-        from_user_id: user.id,
+      // Send offer via API
+      await callsApi.sendSignal((call as Call).id, {
+        to_user_id: targetUser?.id || "",
         signal_type: "offer",
-        payload: offer as unknown as import("../types/database").Json,
+        payload: offer,
       });
 
-      // Send background FCM push via backend route
+      // FCM push for wake-up
       fetch("/api/sendCallPush", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          callId: call.id,
+          callId: (call as Call).id,
           conversationId,
-          initiatorId: user.id,
-          initiatorName: user.user_metadata?.display_name || "Varta User",
+          initiatorId: user.uid,
+          initiatorName: user.displayName || "Varta User",
           callType: type,
           recipientIds: targetUser ? [targetUser.id] : [],
         }),
@@ -629,10 +451,8 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
         if (callStatusRef.current === "calling" || callStatusRef.current === "ringing") {
           callAudio.stop();
           callAudio.playMissedCall();
-
-          await supabase.from("calls").update({ status: "missed", ended_at: new Date().toISOString() }).eq("id", call.id);
-          await _insertCallLog(conversationId, call.id, "missed", type);
-
+          await callsApi.update((call as Call).id, { status: "missed", ended_at: new Date().toISOString() });
+          await _insertCallLog(conversationId, (call as Call).id, "missed", type);
           setCallStatus("missed");
           setTimeout(() => clearCallState(), 2500);
         }
@@ -664,10 +484,9 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       setIncomingCall(null);
       setCallStatus("connecting");
 
-      await supabase.from("call_participants").insert({
-        call_id: incomingCall.id,
-        user_id: user.id,
-        joined_at: new Date().toISOString(),
+      await callsApi.update(incomingCall.id, {
+        status: "connecting",
+        answered_at: new Date().toISOString(),
       });
 
       const pc = await createPeerConnection(incomingCall.id);
@@ -675,25 +494,20 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
 
       subscribeToSignals(incomingCall.id, "answerer");
 
-      // Check for existing SDP offer
-      const { data: signals } = await supabase
-        .from("call_signals")
-        .select("*")
-        .eq("call_id", incomingCall.id)
-        .eq("signal_type", "offer")
-        .order("created_at", { ascending: true })
-        .limit(1);
+      // Fetch existing offer signal
+      const { data: signals } = await callsApi.getSignals(incomingCall.id);
+      const offerSig = (signals as any[] | null)?.find(
+        (s: any) => s.signal_type === "offer" && s.from_user_id !== user.uid,
+      );
 
-      const offerSig = signals?.[0];
-      if (offerSig && offerSig.from_user_id !== user.id) {
-        await pc.setRemoteDescription(new RTCSessionDescription(offerSig.payload as unknown as RTCSessionDescriptionInit));
+      if (offerSig) {
+        await pc.setRemoteDescription(new RTCSessionDescription(offerSig.payload as RTCSessionDescriptionInit));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        await supabase.from("call_signals").insert({
-          call_id: incomingCall.id,
-          from_user_id: user.id,
+        await callsApi.sendSignal(incomingCall.id, {
+          to_user_id: offerSig.from_user_id,
           signal_type: "answer",
-          payload: answer as unknown as import("../types/database").Json,
+          payload: answer,
         });
       }
     } catch (err) {
@@ -705,14 +519,13 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
   // ─── Decline Call ─────────────────────────────────────────────────────────
   const declineCall = async () => {
     if (!incomingCall && !activeCall) return;
-
     if (ringTimerRef.current) { clearTimeout(ringTimerRef.current); ringTimerRef.current = null; }
     callAudio.stop();
     stopTitleFlashing();
 
     const targetCallId = incomingCall?.id || activeCall?.id;
     if (targetCallId) {
-      await supabase.from("calls").update({ status: "declined", ended_at: new Date().toISOString() }).eq("id", targetCallId);
+      await callsApi.update(targetCallId, { status: "declined", ended_at: new Date().toISOString() });
     }
 
     callAudio.playCallEnded();
@@ -731,21 +544,19 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
     if (call) {
       const endedAt = new Date();
       let durationSecs = 0;
-
       if (connectedAt) {
         durationSecs = Math.max(0, Math.round((endedAt.getTime() - connectedAt.getTime()) / 1000));
       }
 
-      await supabase.from("calls").update({
+      await callsApi.update(call.id, {
         status: "ended",
         ended_at: endedAt.toISOString(),
         duration_seconds: durationSecs,
-      }).eq("id", call.id);
+      });
 
       if (user) {
-        await supabase.from("call_signals").insert({
-          call_id: call.id,
-          from_user_id: user.id,
+        await callsApi.sendSignal(call.id, {
+          to_user_id: "",
           signal_type: "hangup",
           payload: {},
         });
@@ -768,6 +579,10 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
+    }
+    if (signalUnsubRef.current) {
+      signalUnsubRef.current();
+      signalUnsubRef.current = null;
     }
 
     setLocalStream(null);
@@ -803,7 +618,6 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
     if (!pcRef.current) return;
 
     if (isScreenSharing) {
-      // Revert to camera stream
       screenStream?.getTracks().forEach((t) => t.stop());
       setScreenStream(null);
       setIsScreenSharing(false);
@@ -811,9 +625,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       if (localStream) {
         const videoTrack = localStream.getVideoTracks()[0];
         const sender = pcRef.current.getSenders().find((s) => s.track?.kind === "video");
-        if (sender && videoTrack) {
-          sender.replaceTrack(videoTrack);
-        }
+        if (sender && videoTrack) sender.replaceTrack(videoTrack);
       }
     } else {
       try {
@@ -823,22 +635,16 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
 
         const screenTrack = screen.getVideoTracks()[0];
         const sender = pcRef.current.getSenders().find((s) => s.track?.kind === "video");
-        if (sender && screenTrack) {
-          sender.replaceTrack(screenTrack);
-        }
+        if (sender && screenTrack) sender.replaceTrack(screenTrack);
 
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
+        screenTrack.onended = () => { toggleScreenShare(); };
       } catch (err) {
         console.warn("Screen share cancelled", err);
       }
     }
   };
 
-  const toggleRaiseHand = () => {
-    setIsHandRaised((prev) => !prev);
-  };
+  const toggleRaiseHand = () => { setIsHandRaised((prev) => !prev); };
 
   const toggleMuteRingtone = () => {
     const next = !isRingtoneMuted;
@@ -856,9 +662,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       const newAudioTrack = newStream.getAudioTracks()[0];
       if (pcRef.current) {
         const sender = pcRef.current.getSenders().find((s) => s.track?.kind === "audio");
-        if (sender && newAudioTrack) {
-          sender.replaceTrack(newAudioTrack);
-        }
+        if (sender && newAudioTrack) sender.replaceTrack(newAudioTrack);
       }
     } catch (e) {
       console.error("Error switching audio input", e);
@@ -924,13 +728,12 @@ async function _insertCallLog(
   durationSecs = 0,
 ) {
   const icon = type === "video" ? "📹" : "📞";
-  const label = outcome === "missed"
-    ? `${icon} Missed ${type} call`
-    : `${icon} ${type === "video" ? "Video" : "Voice"} call · ${formatDuration(durationSecs)}`;
+  const label =
+    outcome === "missed"
+      ? `${icon} Missed ${type} call`
+      : `${icon} ${type === "video" ? "Video" : "Voice"} call · ${formatDuration(durationSecs)}`;
 
-  await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    sender_id: null,
+  await messagesApi.send(conversationId, {
     type: "call_log",
     content: `${label}||call_id=${callId}`,
   });

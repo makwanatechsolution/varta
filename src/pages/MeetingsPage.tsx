@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Plus, Calendar, Clock, Users, Video, X, Check } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
+import { meetingsApi } from "../lib/api";
 import { format, isPast, isFuture } from "date-fns";
 import type { Meeting } from "../types/database";
 
@@ -14,11 +14,7 @@ function useMeetings() {
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("meetings")
-      .select("*")
-      .or(`host_id.eq.${user.id}`)
-      .order("scheduled_at", { ascending: true });
+    const { data } = await meetingsApi.list();
     setMeetings((data as Meeting[]) ?? []);
     setLoading(false);
   };
@@ -46,13 +42,11 @@ export function MeetingsPage() {
     if (!user || !title.trim() || !scheduledAt) return;
     setCreating(true);
 
-    await supabase.from("meetings").insert({
-      host_id: user.id,
+    await meetingsApi.create({
       title: title.trim(),
       description: description.trim() || null,
       scheduled_at: scheduledAt,
       waiting_room_enabled: waitingRoom,
-      status: "scheduled",
     });
 
     setTitle("");
@@ -64,7 +58,7 @@ export function MeetingsPage() {
   };
 
   const cancelMeeting = async (id: string) => {
-    await supabase.from("meetings").update({ status: "cancelled" }).eq("id", id);
+    await meetingsApi.delete(id);
     reload();
   };
 

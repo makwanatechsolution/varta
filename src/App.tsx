@@ -21,8 +21,8 @@ import { useEffect } from "react";
 import { requestPushPermission } from "./lib/firebase";
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
-  const { session, profile, loading } = useAuth();
-  if (loading || (!profile && session)) {
+  const { user, profile, loading } = useAuth();
+  if (loading || (!profile && user)) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "var(--bg-main)" }}>
         <div className="flex flex-col items-center gap-4" style={{ color: "var(--text-muted)" }}>
@@ -32,7 +32,7 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
       </div>
     );
   }
-  if (!session) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   if (requireAdmin && !profile?.is_admin) return <Navigate to="/" replace />;
   
   const isApprovedOrAdmin = profile?.is_approved || profile?.is_admin;

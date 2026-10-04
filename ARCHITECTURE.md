@@ -1,39 +1,91 @@
 # Varta Platform — Enterprise Architecture & System Design Document
 
-**System Version:** 2.4.0 (Production Enterprise Release)  
-**Architectural Pattern:** Serverless Microservices + Real-Time Reactive Single Page Application (SPA)  
-**Target Scale:** Enterprise SaaS Multi-Tenant Support  
+**System Version:** 3.0.0 (Google Cloud Platform Always Free Lifetime Release)  
+**Architectural Pattern:** Self-Hosted Microservices on GCP Always Free (e2-micro + Swap) + Reactive SPA  
+**Target Scale:** Enterprise SaaS Multi-Tenant Support ($0.00 / 0 INR Infrastructure)  
 
 ---
 
 ## 1. High-Level Architectural Overview
 
-Varta is a modern real-time communication platform designed to deliver unified messaging, WebRTC audio/video calling, disappearing status updates, and administrative workflow controls at zero infrastructure maintenance overhead.
+Varta is a modern real-time communication platform designed to deliver unified messaging, WebRTC audio/video calling, disappearing status updates, and administrative workflow controls at zero infrastructure cost (**$0.00 / 0 INR lifetime**).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            Varta Web & Desktop SPA                          │
 │        React 19 + TypeScript + Tailwind CSS + Framer Motion + WebAudio      │
-└──────────────┬──────────────────────────────┬───────────────────────────────┘
-               │                              │
-    WebSockets │ (Realtime Postgres)          │ HTTPS / REST (Serverless Functions)
-               ▼                              ▼
-┌──────────────────────────────┐    ┌─────────────────────────────────────────┐
-│       Supabase Cloud         │    │      Vercel Serverless API Layer        │
-│  - PostgreSQL 15 Engine      │    │  - /api/notifyAdminSignup               │
-│  - Realtime Pub/Sub Broker   │    │  - /api/notifyUserApproved              │
-│  - Storage Buckets (Media)   │    │  - /api/sendInviteEmail                 │
-│  - Built-in GoTrue Auth      │    │  - /api/sendMessagePush                 │
-│  - Row Level Security (RLS)  │    │  - /api/sendCallPush                    │
-└──────────────────────────────┘    └───────────────────┬─────────────────────┘
-               ▲                                        │
-               │ Direct Peer Traversal (STUN/TURN)      │ Server-Side Dispatch
-               │                                        ▼
-┌──────────────┴───────────────┐    ┌─────────────────────────────────────────┐
-│     WebRTC Peer Mesh / TURN  │    │        Third-Party Services             │
-│   - Metered Video TURN Relay │    │  - Resend Transactional Email API       │
-│   - Google Public STUN Relay │    │  - Firebase Cloud Messaging (FCM Push)  │
-└──────────────────────────────┘    └─────────────────────────────────────────┘
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                         HTTPS / WSS   │ (Port 80 / 443)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Nginx Edge Gateway & Reverse Proxy                      │
+│             - SSL Termination (Let's Encrypt / Certbot)                     │
+│             - Static Client SPA Hosting (/var/www/html)                     │
+│             - WebSocket Connection Upgrades (/realtime/v1)                  │
+└──────────────┬──────────────────────────────────────────────┬───────────────┘
+               │                                              │
+    HTTP / REST│ (/api/*)                          HTTP / WSS │ (/auth, /rest, /realtime)
+               ▼                                              ▼
+┌──────────────────────────────┐              ┌───────────────────────────────┐
+│     Varta Express Backend    │              │       Supabase Open Source    │
+│  - Firebase FCM Web Push     │              │  - Kong API Gateway           │
+│  - Resend Email Dispatch     │              │  - GoTrue Auth Engine         │
+│  - Health & Metrics API      │              │  - PostgREST 12 API           │
+│  - Disaster Recovery Webhook │              │  - Realtime WebSocket Server  │
+└──────────────────────────────┘              │  - Storage API (Media Bucket) │
+                                              └──────────────┬────────────────┘
+                                                             │
+                                                             ▼
+                                              ┌───────────────────────────────┐
+                                              │      PostgreSQL 15 Engine     │
+                                              │  - Complete Schemas (001-006) │
+                                              │  - Row Level Security (RLS)   │
+                                              │  - Persistent Docker Volume   │
+                                              └───────────────────────────────┘
+```
+
+---
+
+## 1.1 Zero-Rupee Budget Watchdog & Kill-Switch Architecture
+
+```
+                    ┌───────────────────────────┐
+                    │ GCP Cloud Billing Budget  │
+                    │ Threshold: > 0.0001 INR   │
+                    └─────────────┬─────────────┘
+                                  │ Every 15 min
+                                  ▼
+                    ┌───────────────────────────┐
+                    │   Cost Watchdog Daemon    │
+                    │  (cost_watchdog.sh)       │
+                    └─────────────┬─────────────┘
+                                  │
+                  Is Cost > 0?    │
+            ┌─────────────────────┴─────────────────────┐
+            ▼ No                                        ▼ Yes (Emergency)
+    [Sleep & Continue]                  ┌───────────────────────────────┐
+                                        │  STEP 1: Safe Harbor Backup   │
+                                        │  - pg_dumpall Database Dump   │
+                                        │  - Storage Media Snapshot     │
+                                        │  - SHA-256 Hash Verification  │
+                                        │  - Offsite Push to GitHub     │
+                                        └───────────────┬───────────────┘
+                                                        │
+                                                        ▼
+                                        ┌───────────────────────────────┐
+                                        │  STEP 2: Dispatch Webhook     │
+                                        │  - Alert Discord/Telegram     │
+                                        └───────────────┬───────────────┘
+                                                        │
+                                                        ▼
+                                        ┌───────────────────────────────┐
+                                        │  STEP 3: Kill Switch Teardown │
+                                        │  - docker compose down -v     │
+                                        │  - gcloud compute instances   │
+                                        │    delete --delete-disks=all  │
+                                        │  - Zero rupees charged!       │
+                                        └───────────────────────────────┘
 ```
 
 ---

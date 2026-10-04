@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Search, X, MessageCircle, User, Hash, Clock, ArrowLeft, Loader2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Avatar } from "../components/ui/Avatar";
-import { supabase } from "../lib/supabase";
+import { conversationsApi, messagesApi, profilesApi } from "../lib/api";
 import type { Message, Profile, Conversation } from "../types/database";
 import { formatDistanceToNow } from "date-fns";
 import { createDirectConversation } from "../hooks/useChat";
@@ -76,51 +76,16 @@ export function SearchPage() {
     }
     setLoading(true);
 
-    // Get my conversation IDs for scoping message search
-    const { data: memberships } = await supabase
-      .from("conversation_members")
-      .select("conversation_id")
-      .eq("user_id", user.id);
-    const convIds = memberships?.map((m: any) => m.conversation_id) ?? [];
-
-    // Run all 3 queries in parallel
+    // Run all queries in parallel
     const [messagesResult, usersResult, conversationsResult] = await Promise.allSettled([
-      // Messages — full-text ilike search across content
-      convIds.length > 0
-        ? supabase
-            .from("messages")
-            .select(`
-              id, conversation_id, sender_id, type, content, media_url, gif_url,
-              created_at, is_deleted,
-              sender:profiles!sender_id(id, display_name, avatar_url),
-              conversation:conversations!conversation_id(id, title, type)
-            `)
-            .in("conversation_id", convIds)
-            .ilike("content", `%${q}%`)
-            .eq("is_deleted", false)
-            .order("created_at", { ascending: false })
-            .limit(30)
-        : Promise.resolve({ data: [] }),
+      // Messages
+      messagesApi.search(q),
 
-      // Users — search by name OR username
-      supabase
-        .from("profiles")
-        .select("id, display_name, username, avatar_url, presence, bio")
-        .or(`display_name.ilike.%${q}%,username.ilike.%${q}%,bio.ilike.%${q}%`)
-        .neq("id", user.id)
-        .limit(20),
+      // Users 
+      profilesApi.search(q),
 
-      // Conversations — search by title (groups & channels)
-      convIds.length > 0
-        ? supabase
-            .from("conversations")
-            .select(`id, title, type, avatar_url, description, last_message_at,
-              members:conversation_members(count)`)
-            .in("id", convIds)
-            .neq("type", "direct")
-            .ilike("title", `%${q}%`)
-            .limit(15)
-        : Promise.resolve({ data: [] }),
+      // Conversations 
+      conversationsApi.search(q),
     ]);
 
     setResults({

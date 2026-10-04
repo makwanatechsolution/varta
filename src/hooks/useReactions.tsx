@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import { reactionsApi } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 
 // Standard emoji data grouped by category
@@ -13,7 +13,7 @@ const EMOJI_CATEGORIES = [
   {
     label: "Gestures",
     icon: "👋",
-    emojis: ["👋","🤚","🖐️","✋","🖖","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","👐","🤲","🤝","🙏","✍️","💅","🤳","💪","🦾","🦿","🦵","🦶","👂","🦻","👃","🫀","🫁","🧠","🦷","🦴","👀","👁️","👅","👄"],
+    emojis: ["👋","🤚","🖐️","✋","🖖","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","👐","🤲","🤝","🙏","✍️","💅","🤳","💪","🦾","🦿","🦵","🦶","👂","🦻","👃","🧠","🦷","🦴","👀","👁️","👅","👄"],
   },
   {
     label: "Hearts & Love",
@@ -28,22 +28,22 @@ const EMOJI_CATEGORIES = [
   {
     label: "Food",
     icon: "🍕",
-    emojis: ["🍕","🍔","🌮","🌯","🥪","🥗","🍜","🍝","🍛","🍣","🍱","🍤","🍙","🍚","🍘","🍥","🥮","🍢","🧆","🥚","🍳","🥘","🍲","🥣","🥧","🧇","🥞","🧈","🍞","🥐","🥖","🫓","🥨","🥯","🧀","🥩","🥓","🌭","🍟","🫔","🧆","🥙","🫕","🥫","🧂","🥦","🧄","🧅","🍄","🌽","🌶️","🫑","🥕","🧑‍🍳","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🫒","🍠"],
+    emojis: ["🍕","🍔","🌮","🌯","🥪","🥗","🍜","🍝","🍛","🍣","🍱","🍤","🍙","🍚","🍘","🍥","🥮","🍢","🧆","🥚","🍳","🥘","🍲","🥣","🥧","🧇","🥞","🧈","🍞","🥐","🥖","🫓","🥨","🥯","🧀","🥩","🥓","🌭","🍟","🫔","🥙","🫕","🥫","🧂","🥦","🧄","🧅","🍄","🌽","🌶️","🫑","🥕","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🫒","🍠"],
   },
   {
     label: "Activities",
     icon: "⚽",
-    emojis: ["⚽","🏀","🏈","⚾","🎾","🏐","🏉","🥏","🎱","🏓","🏸","🏒","🏑","🥍","🏏","🪃","🥅","⛳","🪁","🎿","🛷","🥌","🎯","🪀","🪆","🎮","🕹️","🎲","🎭","🎨","🖼️","🎪","🎤","🎧","🎼","🎵","🎶","🎷","🎸","🎹","🎺","🎻","🪕","🥁","🪘","🎬","🎤"],
+    emojis: ["⚽","🏀","🏈","⚾","🎾","🏐","🏉","🥏","🎱","🏓","🏸","🏒","🏑","🥍","🏏","🪃","🥅","⛳","🪁","🎿","🛷","🥌","🎯","🪀","🪆","🎮","🕹️","🎲","🎭","🎨","🖼️","🎪","🎤","🎧","🎼","🎵","🎶","🎷","🎸","🎹","🎺","🎻","🪕","🥁","🪘","🎬"],
   },
   {
     label: "Travel",
     icon: "🚀",
-    emojis: ["🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚐","🛻","🚚","🚛","🚜","🏍️","🛵","🛺","🚲","🛴","🛹","🛼","🚁","🛸","🚀","✈️","🛩️","🛶","⛵","🚤","🛥️","🛳️","⛴️","🚢","⚓","🗺️","🧭","🗼","🗽","🗿","🗺️","🏔️","🌋","🏕️","🏖️","🏜️","🏝️","🏞️","🌅","🌄","🌇","🌆","🌃","🌉","🌌"],
+    emojis: ["🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚐","🛻","🚚","🚛","🚜","🏍️","🛵","🛺","🚲","🛴","🛹","🛼","🚁","🛸","🚀","✈️","🛩️","🛶","⛵","🚤","🛥️","🛳️","⛴️","🚢","⚓","🗺️","🧭","🗼","🗽","🗿","🏔️","🌋","🏕️","🏖️","🏜️","🏝️","🏞️","🌅","🌄","🌇","🌆","🌃","🌉","🌌"],
   },
   {
     label: "Objects",
     icon: "💡",
-    emojis: ["💡","🔦","🕯️","🪔","💰","💴","💵","💶","💷","💸","💳","🪙","💎","⚖️","🧲","🪜","🔧","🪛","🔩","⚙️","🗜️","🔫","💣","🪓","🔪","🗡️","🛡️","🔑","🗝️","🔐","🔒","🔓","🚪","🪞","🛋️","🚿","🛁","🪣","📱","💻","🖥️","⌨️","🖱️","📷","📸","📹","🎥","📺","📻","📞","☎️","📟","📠","🔋","🔌","💿","📀","🖨️","📡","🧯","🪬","🔭","🔬","🧬","💊","🩺","🏥","🚨","🚔","🚍","🚘","🚖"],
+    emojis: ["💡","🔦","🕯️","🪔","💰","💴","💵","💶","💷","💸","💳","🪙","💎","⚖️","🧲","🪜","🔧","🪛","🔩","⚙️","🗜️","🔫","💣","🪓","🔪","🗡️","🛡️","🔑","🗝️","🔐","🔒","🔓","🚪","🪞","🛋️","🚿","🛁","🪣","📱","💻","🖥️","⌨️","🖱️","📷","📸","📹","🎥","📺","📻","📞","☎️","📟","📠","🔋","🔌","💿","📀","🖨️","📡","🧯","🔭","🔬","🧬","💊","🩺","🏥"],
   },
 ];
 
@@ -73,50 +73,7 @@ export function useReactions(messageId: string) {
     async (emoji: string) => {
       if (!user) return;
       recordUsed(emoji);
-
-      const { data: existing } = await supabase
-        .from("message_reactions")
-        .select("id")
-        .eq("message_id", messageId)
-        .eq("user_id", user.id)
-        .eq("emoji", emoji)
-        .maybeSingle();
-
-      if (existing) {
-        await supabase.from("message_reactions").delete().eq("id", existing.id);
-      } else {
-        await supabase.from("message_reactions").insert({
-          message_id: messageId,
-          user_id: user.id,
-          emoji,
-        });
-
-        // Trigger push notification to original message author
-        try {
-          const { data: msg } = await supabase
-            .from("messages")
-            .select("sender_id, conversation_id, content")
-            .eq("id", messageId)
-            .maybeSingle();
-
-          if (msg && msg.sender_id && msg.sender_id !== user.id) {
-            const senderName = user.user_metadata?.display_name || "Someone";
-            fetch("/api/sendMessagePush", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                conversationId: msg.conversation_id,
-                senderId: user.id,
-                senderName,
-                preview: `Reacted ${emoji} to: "${msg.content ? msg.content.substring(0, 30) : 'a message'}"`,
-                recipientIds: [msg.sender_id],
-              }),
-            }).catch((err) => console.warn("Failed to trigger reaction push notification:", err));
-          }
-        } catch (pushErr) {
-          console.warn("Error fetching message author for reaction push:", pushErr);
-        }
-      }
+      await reactionsApi.toggle(messageId, emoji);
     },
     [messageId, user],
   );
@@ -150,10 +107,7 @@ export function EmojiPickerPanel({ onSelect, onClose }: EmojiPickerPanelProps) {
   };
 
   const filteredEmojis = search.trim()
-    ? EMOJI_CATEGORIES.flatMap((c) => c.emojis).filter((e) =>
-        // simple character match — good enough for emoji search
-        e.includes(search),
-      )
+    ? EMOJI_CATEGORIES.flatMap((c) => c.emojis).filter((e) => e.includes(search))
     : null;
 
   return (

@@ -1,0 +1,30 @@
+# ==============================================================================
+# VARTA GCP ALWAYS FREE TERRAFORM CONFIGURATION VARIABLES
+# Copy this file to terraform.tfvars and fill in your values.
+# ==============================================================================
+
+# GCP Project & Region (Must be in Always Free regions: us-central1, us-east1, or us-west1)
+gcp_project_id     = "your-gcp-project-id"
+gcp_region         = "us-central1"
+gcp_zone           = "us-central1-a"
+
+# Optional: Path to Service Account JSON key (Leave empty if using `gcloud auth application-default login`)
+credentials_file   = ""
+
+# GCP Billing Account ID for Zero-Cost Budget Guardrail alerts (Format: XXXXXX-XXXXXX-XXXXXX)
+# Found in: Google Cloud Console -> Billing -> Account Management
+billing_account_id = "012345-6789AB-CDEF01"
+
+# SSH Access Configuration
+ssh_user           = "ubuntu"
+ssh_public_key     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... you@email.com"
+
+# Always Free Tier Specs (Guaranteed $0.00 / 0 INR lifetime)
+machine_type       = "e2-micro"      # 1 free e2-micro instance per month
+boot_disk_size_gb  = 30              # Up to 30 GB standard persistent disk free per month
+boot_disk_type     = "pd-standard"   # Standard persistent disk
+
+# Emergency Alert Contact
+alert_email        = "yash.makwana.b@gmail.com"
+budget_amount      = 1
+budget_currency    = "USD"

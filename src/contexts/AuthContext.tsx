@@ -1,100 +1,79 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import { firebaseAuth, firebaseSignOut } from "../lib/firebase";
+import { profilesApi } from "../lib/api";
 import type { Profile } from "../types/database";
 
+export interface AuthUser extends FirebaseUser {
+  id: string;
+}
+
 interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
+  /** Firebase user — null when signed out */
+  user: AuthUser | null;
+  /** Backend profile record */
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-    if (data) {
-      setProfile(data as Profile);
-    } else if (!error) {
-      // Auto-create missing profile record if missing in DB
-      const userRes = await supabase.auth.getUser();
-      const authUser = userRes.data.user;
-      if (authUser) {
-        const displayName = authUser.user_metadata?.display_name || authUser.email?.split("@")[0] || "User";
-        const { data: created } = await supabase
-          .from("profiles")
-          .upsert({
-            id: userId,
-            display_name: displayName,
-            is_approved: false,
-            is_admin: false,
-          })
-          .select()
-          .single();
-        if (created) setProfile(created as Profile);
+  const fetchProfile = async () => {
+    try {
+      const { data, error } = await profilesApi.getMe();
+      if (data) {
+        setProfile(data as Profile);
+      } else {
+        console.warn("fetchProfile error:", error);
       }
+    } catch (err) {
+      console.warn("fetchProfile failed:", err);
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) fetchProfile(data.session.user.id);
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+      if (firebaseUser) {
+        Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
+        setUser(firebaseUser as AuthUser);
+        // Give API client a moment to pick up the new token
+        await fetchProfile();
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
       setLoading(false);
     });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s?.user) fetchProfile(s.user.id);
-      else setProfile(null);
-    });
-
-    let profileChannel: ReturnType<typeof supabase.channel> | null = null;
-    if (session?.user?.id) {
-      profileChannel = supabase
-        .channel(`user_profile:${session.user.id}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${session.user.id}` },
-          (payload) => {
-            if (payload.new) setProfile(payload.new as Profile);
-          }
-        )
-        .subscribe();
-    }
-
-    return () => {
-      sub.subscription.unsubscribe();
-      if (profileChannel) supabase.removeChannel(profileChannel);
-    };
-  }, [session?.user?.id]);
+    return unsubscribe;
+  }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    await signInWithEmailAndPassword(firebaseAuth, email, password);
+    // onAuthStateChanged will trigger fetchProfile
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: displayName },
-        emailRedirectTo: `${window.location.origin}`,
-      },
-    });
-    if (error) throw error;
-    
+    const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+    // Set display name in Firebase
+    await updateProfile(cred.user, { displayName });
+    // Backend will auto-create profile on first /api/profiles/me call
     // Notify admin of new signup
     try {
       await fetch("/api/notifyAdminSignup", {
@@ -108,23 +87,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    if (session?.user) {
-      await supabase.from("profiles").update({ presence: "offline", last_seen: new Date().toISOString() }).eq("id", session.user.id);
-    }
-    await supabase.auth.signOut();
+    try {
+      await profilesApi.updatePresence("offline");
+    } catch { /* best effort */ }
+    await firebaseSignOut(firebaseAuth);
+  };
+
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(firebaseAuth, email);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        session,
-        user: session?.user ?? null,
+        user,
         profile,
         loading,
         signIn,
         signUp,
         signOut,
-        refreshProfile: () => (session?.user ? fetchProfile(session.user.id) : Promise.resolve()),
+        refreshProfile: fetchProfile,
+        resetPassword,
       }}
     >
       {children}

@@ -1,0 +1,10 @@
+[Unit]
+Description=Varta Zero-Cost Billing Watchdog Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/varta/scripts/cost_watchdog.sh
+StandardOutput=journal
+StandardError=journal

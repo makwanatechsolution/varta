@@ -34,7 +34,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCallingContext } from "../contexts/CallingContext";
 import { useSettings, PRESET_ACCENTS } from "../contexts/SettingsContext";
 import { usePresence } from "../hooks/usePresence";
-import { supabase } from "../lib/supabase";
+import { profilesApi } from "../lib/api";
+import { vartaWS } from "../lib/ws";
+import { getAuth, updatePassword } from "firebase/auth";
 import { Avatar } from "../components/ui/Avatar";
 import { QRCodeModal } from "../components/ui/QRCodeModal";
 import { callAudio } from "../lib/audio";
@@ -322,47 +324,14 @@ function ProfileSettingsPane() {
     try {
       // Compress and resize to 512x512 JPEG
       const blob = await compressImage(previewFile, 512);
+      
+      const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+      const finalUrl = await profilesApi.uploadAvatar(file);
+      if (!finalUrl) throw new Error("Upload failed");
 
-      let finalUrl = "";
-      const path1 = `avatars/${profile.id}/${Date.now()}.jpg`;
-      const path2 = `${profile.id}/${Date.now()}.jpg`;
+      const { error: updateErr } = await profilesApi.update({ avatar_url: finalUrl });
+      if (updateErr) throw new Error(updateErr);
 
-      // Try path 1
-      const { error: err1 } = await supabase.storage
-        .from("media")
-        .upload(path1, blob, { contentType: "image/jpeg", upsert: true });
-
-      if (!err1) {
-        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path1);
-        finalUrl = `${publicUrl}?t=${Date.now()}`;
-      } else {
-        // Try path 2 if path 1 has RLS restrictions
-        const { error: err2 } = await supabase.storage
-          .from("media")
-          .upload(path2, blob, { contentType: "image/jpeg", upsert: true });
-
-        if (!err2) {
-          const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(path2);
-          finalUrl = `${publicUrl}?t=${Date.now()}`;
-        } else {
-          // If storage bucket RLS blocks binary upload, convert to data URL fallback so update never fails
-          const reader = new FileReader();
-          finalUrl = await new Promise<string>((resolve) => {
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.readAsDataURL(blob);
-          });
-        }
-      }
-
-      // Update profiles table
-      const { error: updateErr } = await supabase
-        .from("profiles")
-        .update({ avatar_url: finalUrl })
-        .eq("id", profile.id);
-
-      if (updateErr) throw updateErr;
-
-      await supabase.auth.updateUser({ data: { avatar_url: finalUrl } });
       await refreshProfile();
 
       setPreviewFile(null);
@@ -379,12 +348,7 @@ function ProfileSettingsPane() {
     if (!profile || !confirm("Are you sure you want to remove your profile picture?")) return;
     setIsUploadingAvatar(true);
     try {
-      await supabase
-        .from("profiles")
-        .update({ avatar_url: null })
-        .eq("id", profile.id);
-
-      await supabase.auth.updateUser({ data: { avatar_url: null } });
+      await profilesApi.update({ avatar_url: null });
       await refreshProfile();
     } catch (err: any) {
       console.error("Failed to remove avatar:", err);
@@ -414,11 +378,10 @@ function ProfileSettingsPane() {
     setIsSaving(true);
     setSaveError(null);
     try {
-      const { error } = await supabase.from("profiles").update({
+      const { error } = await profilesApi.update({
         display_name: displayName.trim(), username: username.trim(), bio: bio.trim(), phone: phone.trim() || null,
-      }).eq("id", profile.id);
-      if (error) throw error;
-      await supabase.auth.updateUser({ data: { display_name: displayName.trim() } });
+      });
+      if (error) throw new Error(error);
       await refreshProfile();
       setIsSaved(true);
       window.setTimeout(() => setIsSaved(false), 3000);
@@ -692,11 +655,8 @@ function StatusSettingsPane() {
     setSaving(true);
     await setManualStatus(selectedPresence);
     const expiresAt = expiration === "Don't clear" ? null : new Date(Date.now() + (expiration === "1 Hour" ? 60 : expiration === "4 Hours" ? 240 : 1440) * 60_000).toISOString();
-    const { error } = await supabase
-      .from("profiles")
-      .update({ presence: selectedPresence, custom_status: customText.trim() || null, custom_status_expires_at: expiresAt })
-      .eq("id", profile.id);
-    if (error) throw error;
+    const { error } = await profilesApi.update({ custom_status: customText.trim() || null, custom_status_expires_at: expiresAt });
+    if (error) throw new Error(error);
     await refreshProfile();
     setSaving(false);
   };
@@ -881,8 +841,9 @@ function AccountSettingsPane() {
     setUpdatingPassword(true);
     setPasswordStatus(null);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      const user = getAuth().currentUser;
+      if (!user) throw new Error("No authenticated user");
+      await updatePassword(user, newPassword);
       setPasswordStatus({ text: "✅ Password updated successfully!", success: true });
       setNewPassword("");
       setConfirmPassword("");
@@ -1217,7 +1178,7 @@ function PrivacySettingsPane() {
   const handleSavePrivacy = async (val: any) => {
     setPrivacy(val);
     if (!profile) return;
-    await supabase.from("profiles").update({ status_privacy: val }).eq("id", profile.id);
+    await profilesApi.update({ status_privacy: val });
     await refreshProfile();
   };
 
@@ -1419,27 +1380,13 @@ function DevicesSettingsPane() {
     if (!cleanCode) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const channel = supabase.channel(`varta-qr-login-${cleanCode}`);
-        channel.subscribe(async (status) => {
-          if (status === "SUBSCRIBED") {
-            await channel.send({
-              type: "broadcast",
-              event: "auth-session",
-              payload: {
-                session: {
-                  access_token: session.access_token,
-                  refresh_token: session.refresh_token,
-                },
-              },
-            });
-            setTimeout(() => {
-              supabase.removeChannel(channel);
-            }, 1200);
-          }
-        });
-      }
+      const channel = `varta-qr-login-${cleanCode}`;
+      (vartaWS as any).send?.({
+        type: "broadcast",
+        channel,
+        event: "auth-session",
+        payload: { token: "scanned-by-device" },
+      });
     } catch (err) {
       console.error("Pairing broadcast error:", err);
     }

@@ -18,7 +18,7 @@ import { GifIcon } from "../components/ui/GifIcon";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import type { EmojiClickData } from "emoji-picker-react";
 import type { GifResult, Message, Conversation, Profile } from "../types/database";
-import { supabase } from "../lib/supabase";
+import { conversationsApi, messagesApi } from "../lib/api";
 import clsx from "clsx";
 
 function getDateDividerLabel(dateStr: string) {
@@ -42,42 +42,15 @@ function useConversationInfo(conversationId: string | undefined, myId: string | 
   useEffect(() => {
     if (!conversationId || !myId) return;
 
-    supabase
-      .from("conversations")
-      .select(`
-        *,
-        members:conversation_members(
-          id, user_id, role,
-          profile:profiles(id, display_name, avatar_url, presence, last_seen)
-        )
-      `)
-      .eq("id", conversationId)
-      .single()
-      .then(({ data }) => {
-        if (!data) return;
-        setConv(data as Conversation);
-        const other = (data as Conversation).members?.find((m) => m.user_id !== myId)?.profile;
-        if (other) setOtherUser(other as Profile);
-      });
+    conversationsApi.getById(conversationId).then(({ data }) => {
+      if (!data) return;
+      setConv(data as Conversation);
+      const other = (data as Conversation).members?.find((m) => m.user_id !== myId)?.profile;
+      if (other) setOtherUser(other as Profile);
+    });
   }, [conversationId, myId]);
 
-  // BUG-7 FIX: live presence update for the other user's header status
-  useEffect(() => {
-    if (!otherUser?.id) return;
-    const ch = supabase
-      .channel(`profile_presence:${otherUser.id}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${otherUser.id}` },
-        (payload) => {
-          setOtherUser((prev) =>
-            prev ? { ...prev, presence: (payload.new as any).presence, last_seen: (payload.new as any).last_seen } : prev
-          );
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [otherUser?.id]);
+  // Real-time presence is handled globally now via WebSocket.
 
   const title = conv?.title ?? otherUser?.display_name ?? "Chat";
   return { conv, otherUser, title };
@@ -220,56 +193,21 @@ export function ChatRoomPage() {
     await sendMessage("", "gif", { gif_url: gif.url, media_url: gif.url });
   };
 
-  const uploadMediaAndSend = async (file: Blob, opts?: { fileName?: string; forceType?: Message["type"] }) => {
-    if (!user || !id) return;
-
-    const inferredType = opts?.forceType
-      ?? ((file.type || "").startsWith("video/") ? "video" : (file.type || "").startsWith("audio/") ? "audio" : "image");
-    const extFromName = opts?.fileName?.split(".").pop()?.toLowerCase();
-    const extFromMime = (file.type || "").split("/")[1]?.split(";")[0]?.toLowerCase();
-    const ext = extFromName || extFromMime || (inferredType === "video" ? "mp4" : inferredType === "audio" ? "webm" : "png");
-    const base = inferredType === "audio" ? "audio" : inferredType;
-    const path = `chat/${id}/${base}_${Date.now()}.${ext}`;
-
-    const { data, error } = await supabase.storage
-      .from("media")
-      .upload(path, file, { upsert: true, contentType: file.type || undefined });
-
-    if (error || !data) {
-      console.error("Media upload failed:", error);
-      const msg = (error as any)?.message || "Upload failed";
-      if (msg.toLowerCase().includes("row-level security") || msg.toLowerCase().includes("unauthorized")) {
-        alert("Upload blocked by storage permissions. Please apply the latest Supabase migration and retry.");
-      }
-      return;
-    }
-
-    const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
-    await sendMessage("", inferredType, { media_url: urlData.publicUrl });
-  };
-
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    await uploadMediaAndSend(file, { fileName: file.name });
+    if (!file || !user || !id) return;
+    const res = await messagesApi.uploadMedia(file);
+    if (!res) return;
+    const isVideo = file.type.startsWith("video/");
+    await sendMessage("", isVideo ? "video" : "image", { media_url: res });
     e.target.value = "";
   };
 
   const handleVoiceSend = async (blob: Blob) => {
-    await uploadMediaAndSend(blob, { fileName: `voice_${Date.now()}.webm`, forceType: "audio" });
-  };
-
-  const handleComposerPaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (editingMsg) return;
-    const items = Array.from(e.clipboardData?.items ?? []);
-    const imageItem = items.find((item) => item.type.startsWith("image/"));
-    if (!imageItem) return;
-
-    const pastedImage = imageItem.getAsFile();
-    if (!pastedImage) return;
-
-    e.preventDefault();
-    await uploadMediaAndSend(pastedImage, { fileName: `pasted_${Date.now()}.png`, forceType: "image" });
+    if (!user || !id) return;
+    const res = await messagesApi.uploadMedia(blob, `audio_${Date.now()}.webm`);
+    if (!res) return;
+    await sendMessage("", "audio", { media_url: res });
   };
 
   const startEdit = (msg: Message) => {
@@ -524,7 +462,6 @@ export function ChatRoomPage() {
                   if (editingMsg) setEditText(e.target.value);
                   else { setText(e.target.value); sendTyping(); }
                 }}
-                onPaste={handleComposerPaste}
                 onKeyDown={(e) => {
                   if (enterToSend) {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }

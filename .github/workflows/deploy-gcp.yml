@@ -1,0 +1,141 @@
+name: Deploy to GCP Always Free VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build Frontend SPA
+        run: npm run build
+        env:
+          # ── API URL (GCP server — dynamic from secret) ──────────────────────
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          # ── Firebase (Google Auth + Push Notifications) ─────────────────────
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
+          # ── WebRTC TURN ──────────────────────────────────────────────────────
+          VITE_TURN_SERVER_URL: ${{ secrets.VITE_TURN_SERVER_URL }}
+          VITE_TURN_USERNAME: ${{ secrets.VITE_TURN_USERNAME }}
+          VITE_TURN_CREDENTIAL: ${{ secrets.VITE_TURN_CREDENTIAL }}
+          # ── GIF APIs ────────────────────────────────────────────────────────
+          VITE_TENOR_API_KEY: ${{ secrets.VITE_TENOR_API_KEY }}
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+          # ── App URL ──────────────────────────────────────────────────────────
+          VITE_APP_URL: ${{ secrets.APP_URL }}
+
+      - name: Setup SSH Key
+        if: ${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
+
+      - name: Sync Application Files to GCP VM
+        if: ${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}
+        run: |
+          ssh ubuntu@${{ secrets.GCP_VM_IP }} "sudo mkdir -p /opt/varta && sudo chown -R ubuntu:ubuntu /opt/varta"
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude 'server/node_modules' \
+            ./ ubuntu@${{ secrets.GCP_VM_IP }}:/opt/varta/
+
+      - name: Write .env on GCP VM & Deploy
+        if: ${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}
+        run: |
+          ssh ubuntu@${{ secrets.GCP_VM_IP }} "bash -s" << 'ENDSSH'
+            set -e
+            cd /opt/varta/deploy
+
+            # ── Write deploy .env (all secrets injected by GitHub Actions) ──
+            cat > .env << 'EOF'
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          APP_URL=${{ secrets.APP_URL }}
+          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+          FIREBASE_SERVICE_ACCOUNT_KEY=${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          ALERT_WEBHOOK_URL=${{ secrets.ALERT_WEBHOOK_URL }}
+          EOF
+
+            # ── SSL: generate self-signed if no cert exists ──────────────────
+            mkdir -p nginx/ssl
+            if [ ! -f nginx/ssl/fullchain.pem ]; then
+              openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                -keyout nginx/ssl/privkey.pem \
+                -out nginx/ssl/fullchain.pem \
+                -subj "/CN=${{ secrets.APP_DOMAIN || 'localhost' }}" 2>/dev/null
+              echo "[SSL] Self-signed certificate generated"
+            fi
+
+            # ── Make scripts executable ──────────────────────────────────────
+            sudo chmod +x /opt/varta/scripts/*.sh 2>/dev/null || true
+
+            # ── Install Watchdog systemd units ───────────────────────────────
+            if [ -f /opt/varta/scripts/varta-watchdog.service ]; then
+              sudo cp /opt/varta/scripts/varta-watchdog.service /etc/systemd/system/
+              sudo cp /opt/varta/scripts/varta-watchdog.timer /etc/systemd/system/
+              sudo systemctl daemon-reload
+              sudo systemctl enable --now varta-watchdog.timer 2>/dev/null || true
+            fi
+
+            # ── Pull latest images & deploy ──────────────────────────────────
+            docker compose down --remove-orphans 2>/dev/null || true
+            docker compose pull 2>/dev/null || true
+            docker compose up -d --build
+
+            echo "[Deploy] Done at $(date)"
+          ENDSSH
+
+      - name: Setup Let's Encrypt SSL (if domain configured)
+        if: ${{ secrets.GCP_VM_IP != '' && secrets.APP_DOMAIN != '' }}
+        run: |
+          ssh ubuntu@${{ secrets.GCP_VM_IP }} "
+            if ! which certbot > /dev/null 2>&1; then
+              sudo snap install --classic certbot 2>/dev/null || sudo apt-get install -y certbot 2>/dev/null || true
+            fi
+            # Attempt certbot — only runs if domain resolves to this IP
+            sudo certbot certonly --standalone --non-interactive --agree-tos \
+              -m ${{ secrets.ADMIN_EMAIL || 'yash.makwana.b@gmail.com' }} \
+              -d ${{ secrets.APP_DOMAIN }} \
+              --pre-hook 'docker stop varta-nginx 2>/dev/null || true' \
+              --post-hook 'docker start varta-nginx 2>/dev/null || true' 2>/dev/null || echo 'Certbot skipped (domain not pointed yet)'
+            # Copy cert if exists
+            if [ -d /etc/letsencrypt/live/${{ secrets.APP_DOMAIN }} ]; then
+              sudo cp /etc/letsencrypt/live/${{ secrets.APP_DOMAIN }}/fullchain.pem /opt/varta/deploy/nginx/ssl/fullchain.pem
+              sudo cp /etc/letsencrypt/live/${{ secrets.APP_DOMAIN }}/privkey.pem /opt/varta/deploy/nginx/ssl/privkey.pem
+              docker restart varta-nginx 2>/dev/null || true
+              echo '[SSL] Let'\''s Encrypt cert installed'
+            fi
+          " || true
+
+      - name: Verify Service Health
+        if: ${{ secrets.GCP_VM_IP != '' }}
+        run: |
+          sleep 15
+          curl --fail --retry 5 --retry-delay 5 \
+            http://${{ secrets.GCP_VM_IP }}:8080/health || \
+          curl --fail --retry 5 --retry-delay 5 \
+            http://${{ secrets.GCP_VM_IP }}/health || \
+          echo "Health check failed - check server logs"

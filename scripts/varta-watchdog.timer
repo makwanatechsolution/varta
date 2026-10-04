@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Varta Zero-Cost Billing Watchdog Every 15 Minutes
+Requires=varta-watchdog.service
+
+[Timer]
+Unit=varta-watchdog.service
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

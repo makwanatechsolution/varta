@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
+import { vartaWS } from "../lib/ws";
 import { generateQRCodeSVG } from "../lib/qrcode";
+import { signInWithGoogleRedirect, signInWithGooglePopup, handleFirebaseGoogleRedirect } from "../lib/firebase";
 import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { profilesApi } from "../lib/api";
 
 export function LoginPage() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
   const [pairingToken, setPairingToken] = useState("");
@@ -33,36 +35,30 @@ export function LoginPage() {
     };
   }, [activeTab, pairingToken]);
 
-  // Realtime Broadcast channel listener for QR Code Login
+  // Realtime Broadcast channel listener for QR Code Login via VartaWS
   useEffect(() => {
     if (activeTab !== "qr" || !pairingToken) return;
 
     setQrStatusText("Waiting for QR scan...");
     const channelName = `varta-qr-login-${pairingToken}`;
-    const channel = supabase.channel(channelName);
+    
+    // Subscribe to WS channel for QR login
+    const unsub = vartaWS.on(channelName, "auth-session", async (payload: any) => {
+      if (payload?.token) {
+        setQrStatusText("Device Authenticated! Redirecting...");
+        setLoading(true);
+        // Normally we'd use Firebase signInWithCustomToken here, but for now just tell user it's WIP
+        setQrStatusText("QR Login is currently disabled during GCP migration.");
+        setLoading(false);
+      }
+    });
 
-    channel
-      .on("broadcast", { event: "auth-session" }, async ({ payload }) => {
-        if (payload?.session?.access_token && payload?.session?.refresh_token) {
-          setQrStatusText("Device Authenticated! Signing in...");
-          setLoading(true);
-          const { data, error: err } = await supabase.auth.setSession({
-            access_token: payload.session.access_token,
-            refresh_token: payload.session.refresh_token,
-          });
-          setLoading(false);
-          if (!err && data.session?.user) {
-            await supabase.auth.getUser();
-            navigate("/", { replace: true });
-          } else {
-            setQrStatusText("Pairing failed. Please refresh QR code and try again.");
-          }
-        }
-      })
-      .subscribe();
+    // Make sure we subscribe to this channel
+    (vartaWS as any).send?.({ type: "subscribe", channel: channelName });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsub();
+      (vartaWS as any).send?.({ type: "unsubscribe", channel: channelName });
     };
   }, [activeTab, pairingToken, navigate]);
 
@@ -107,13 +103,10 @@ export function LoginPage() {
     const timer = setTimeout(async () => {
       setUsernameStatus("checking");
       try {
-        const { data, error: err } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("username", username)
-          .maybeSingle();
-        if (err) throw err;
-        setUsernameStatus(data ? "taken" : "available");
+        const { data } = await profilesApi.search(username);
+        // Very basic check, normally would need an exact match API endpoint
+        const isTaken = Array.isArray(data) && data.some(p => p.username === username);
+        setUsernameStatus(isTaken ? "taken" : "available");
       } catch (e) {
         setUsernameStatus("idle");
       }
@@ -130,17 +123,44 @@ export function LoginPage() {
     return Math.min(strength, 3);
   };
 
-  const handleOAuthSignIn = async (provider: "google" | "github" | "azure" | "apple" | "facebook") => {
-    try {
-      const { error: err } = await supabase.auth.signInWithOAuth({
-        provider: provider as any,
-        options: {
-          redirectTo: `${window.location.origin}`,
-        },
+  useEffect(() => {
+    handleFirebaseGoogleRedirect()
+      .then((res) => {
+        if (res?.user) {
+          navigate("/", { replace: true });
+        }
+      })
+      .catch((err) => {
+        console.warn("Firebase Google redirect result:", err);
       });
-      if (err) throw err;
+  }, [navigate]);
+
+  const handleOAuthSignIn = async (provider: "google") => {
+    setError({});
+    setLoading(true);
+    try {
+      if (provider === "google") {
+        try {
+          await signInWithGoogleRedirect();
+          return;
+        } catch (redirectErr) {
+          console.warn("Firebase redirect failed, attempting popup:", redirectErr);
+          try {
+            const res = await signInWithGooglePopup();
+            if (res?.user) {
+              navigate("/", { replace: true });
+              return;
+            }
+          } catch (popupErr: any) {
+            console.warn("Firebase popup failed:", popupErr);
+            throw popupErr;
+          }
+        }
+      }
     } catch (e: any) {
       setError({ form: `Failed to connect to ${provider}: ${e.message}` });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -148,8 +168,7 @@ export function LoginPage() {
     if (!resetEmail.trim()) return;
     setLoading(true);
     try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail);
-      if (err) throw err;
+      await resetPassword(resetEmail);
       setResetSent(true);
     } catch (err: any) {
       setError({ reset: err.message || "Failed to send reset link." });
@@ -175,8 +194,8 @@ export function LoginPage() {
       navigate("/");
     } catch (err: any) {
       const msg = err.message || "Authentication failed";
-      if (msg.toLowerCase().includes("network") || msg.includes("Failed to fetch") || msg.includes("supabaseUrl")) {
-        setError({ form: "No connection to database. Please check your network connection." });
+      if (msg.toLowerCase().includes("network") || msg.includes("Failed to fetch")) {
+        setError({ form: "No connection to server. Please check your network connection." });
       } else if (msg.includes("password")) {
         setError({ password: msg });
       } else {
@@ -403,20 +422,13 @@ export function LoginPage() {
             <p className="text-center text-xs text-zinc-500 font-medium uppercase tracking-wider">
               Or Sign In With
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <button
                 type="button"
                 onClick={() => handleOAuthSignIn("google")}
                 className="flex items-center justify-center gap-2 rounded-2xl bg-[#111b21] border border-zinc-800 py-2.5 text-xs font-semibold text-white hover:bg-zinc-800 transition-colors"
               >
                 <span>Google</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleOAuthSignIn("github")}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-[#111b21] border border-zinc-800 py-2.5 text-xs font-semibold text-white hover:bg-zinc-800 transition-colors"
-              >
-                <span>GitHub</span>
               </button>
             </div>
           </div>

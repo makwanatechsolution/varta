@@ -1,5 +1,14 @@
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage, isSupported } from "firebase/messaging";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  signInWithPopup,
+  getRedirectResult,
+  signOut as firebaseSignOut,
+  type User as FirebaseUser,
+} from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -10,6 +19,52 @@ const firebaseConfig = {
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
+export const firebaseAuth = getAuth(firebaseApp);
+
+export const googleAuthProvider = new GoogleAuthProvider();
+googleAuthProvider.addScope("profile");
+googleAuthProvider.addScope("email");
+googleAuthProvider.setCustomParameters({ prompt: "select_account" });
+
+/**
+ * Initiates Google Sign-In via Firebase Auth redirect.
+ */
+export async function signInWithGoogleRedirect(): Promise<void> {
+  await signInWithRedirect(firebaseAuth, googleAuthProvider);
+}
+
+/**
+ * Initiates Google Sign-In via Firebase Auth popup.
+ * Returns the Firebase user and idToken for use with our GCP backend.
+ */
+export async function signInWithGooglePopup(): Promise<{ user: FirebaseUser; idToken: string }> {
+  const result = await signInWithPopup(firebaseAuth, googleAuthProvider);
+  const idToken = await result.user.getIdToken();
+  return { user: result.user, idToken };
+}
+
+/**
+ * Handles redirect result on page load after returning from Google OAuth redirect.
+ * Returns user + idToken for our GCP backend to sync/create profile.
+ */
+export async function handleFirebaseGoogleRedirect(): Promise<{
+  user: FirebaseUser;
+  idToken: string;
+} | null> {
+  try {
+    const result = await getRedirectResult(firebaseAuth);
+    if (result && result.user) {
+      const idToken = await result.user.getIdToken();
+      return { user: result.user, idToken };
+    }
+  } catch (err: any) {
+    console.error("Firebase Google Redirect Sign-In error:", err);
+    throw err;
+  }
+  return null;
+}
+
+export { firebaseSignOut };
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return undefined;
@@ -37,7 +92,7 @@ async function registerServiceWorker() {
   return registration;
 }
 
-export async function requestPushPermission(userId: string) {
+export async function requestPushPermission(_userId: string) {
   try {
     const supported = await isSupported();
     if (!supported) return null;
@@ -55,11 +110,9 @@ export async function requestPushPermission(userId: string) {
     });
 
     if (token) {
-      const { supabase } = await import("./supabase");
-      await supabase.from("push_tokens").upsert(
-        { user_id: userId, token, platform: "web" },
-        { onConflict: "user_id,token" },
-      );
+      // Register token with our GCP backend (not Supabase)
+      const { pushTokensApi } = await import("./api");
+      await pushTokensApi.upsert(token, "web");
     }
 
     return token;

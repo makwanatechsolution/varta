@@ -1,0 +1,96 @@
+name: Emergency Zero-Cost Kill Switch (GCP)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "DESTROY-VARTA-INFRA" to confirm complete infrastructure deletion'
+        required: true
+        default: ""
+      reason:
+        description: 'Reason for invoking kill switch'
+        required: false
+        default: "Manual Admin Emergency Trigger"
+
+jobs:
+  execute-kill-switch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "DESTROY-VARTA-INFRA" ]; then
+            echo "Confirmation phrase mismatch! Aborting kill switch."
+            exit 1
+          fi
+
+      - name: Setup SSH Key
+        if: "${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}"
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.GCP_VM_IP }} >> ~/.ssh/known_hosts
+
+      - name: Step 1 - Take Mandatory Safe Harbor Backup
+        if: "${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}"
+        run: |
+          echo "Executing pre-destruction backup on GCP VM..."
+          ssh -o ConnectTimeout=10 ubuntu@${{ secrets.GCP_VM_IP }} "sudo -E /opt/varta/scripts/backup.sh" || true
+
+      - name: Step 2 - Retrieve Backup Artifact to GitHub
+        if: "${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}"
+        id: retrieve_backup
+        run: |
+          LATEST_BACKUP=$(ssh -o ConnectTimeout=10 ubuntu@${{ secrets.GCP_VM_IP }} "ls -t /opt/varta/backups/varta_backup_*.tar.gz 2>/dev/null | head -n 1" || true)
+          if [ -n "${LATEST_BACKUP}" ]; then
+            mkdir -p ./emergency_backup_vault
+            scp ubuntu@${{ secrets.GCP_VM_IP }}:${LATEST_BACKUP}* ./emergency_backup_vault/ || true
+            echo "backup_name=$(basename ${LATEST_BACKUP})" >> $GITHUB_OUTPUT
+            echo "has_backup=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_backup=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Step 3 - Store Emergency Backup in GitHub Artifacts
+        if: steps.retrieve_backup.outputs.has_backup == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: emergency-${{ steps.retrieve_backup.outputs.backup_name }}
+          path: ./emergency_backup_vault/*
+          retention-days: 90
+
+      - name: Step 4 - Trigger Kill Switch on VM
+        if: "${{ secrets.GCP_VM_IP != '' && secrets.GCP_SSH_PRIVATE_KEY != '' }}"
+        run: |
+          echo "Executing kill switch script on GCP VM..."
+          ssh -o ConnectTimeout=10 ubuntu@${{ secrets.GCP_VM_IP }} "sudo /opt/varta/scripts/kill_switch.sh '${{ github.event.inputs.reason }}'" || true
+
+      - name: Step 5 - GCP Cloud API Instance Termination Guardrail
+        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Force Terminate GCP VM and Persistent Disks
+        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        continue-on-error: true
+        run: |
+          echo "Terminating GCP Compute Engine instance and deleting all attached disks via API..."
+          gcloud compute instances delete ${{ secrets.GCP_INSTANCE_NAME || 'varta-gcp-vm' }} \
+            --zone=${{ secrets.GCP_ZONE || 'us-central1-a' }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --delete-disks=all \
+            --quiet
+
+      - name: Send Notification Alert
+        if: always()
+        run: |
+          if [ -n "${{ secrets.ALERT_WEBHOOK_URL }}" ]; then
+            curl -s -X POST -H "Content-Type: application/json" \
+              -d '{"text":"🚨 Emergency Kill Switch Executed! Safe Harbor Backup secured in GitHub Artifacts. GCP VM and Persistent Disks terminated to guarantee 0 rupees spent."}' \
+              "${{ secrets.ALERT_WEBHOOK_URL }}" || true
+          fi

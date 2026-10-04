@@ -9,7 +9,7 @@ import type { Invitation } from "../types/database";
 export function JoinPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
-  const { session, signUp } = useAuth();
+  const { user, signUp } = useAuth();
   const navigate = useNavigate();
 
   const [invite, setInvite] = useState<Invitation | null>(null);
@@ -38,11 +38,11 @@ export function JoinPage() {
 
   // Already logged in — just accept and redirect
   useEffect(() => {
-    if (session && invite && !done) {
+    if (user && invite && !done) {
       setDone(true);
       navigate("/");
     }
-  }, [session, invite, done, navigate]);
+  }, [user, invite, done, navigate]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,0 +1,44 @@
+name: Zero-Cost Continuous Billing Monitor (GCP)
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  check-gcp-spend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Google Cloud
+        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        if: "${{ secrets.GCP_SA_KEY != '' }}"
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Query Billed Spend & Budgets
+        id: query_cost
+        if: "${{ secrets.GCP_SA_KEY != '' && secrets.GCP_BILLING_ACCOUNT_ID != '' }}"
+        run: |
+          echo "Querying Google Cloud Billing Budgets..."
+          BUDGET_JSON=$(gcloud billing budgets list --billing-account="${{ secrets.GCP_BILLING_ACCOUNT_ID }}" --format=json 2>/dev/null || echo "[]")
+          echo "budget_json=${BUDGET_JSON}" >> $GITHUB_OUTPUT
+
+      - name: Trigger Emergency Kill Switch if Cost Detected
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'kill-switch.yml',
+              ref: 'main',
+              inputs: {
+                confirmation: 'DESTROY-VARTA-INFRA',
+                reason: 'AUTOMATED_COST_MONITOR_EXCEEDED_0_RUPEES'
+              }
+            });

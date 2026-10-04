@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useCallingContext } from "../contexts/CallingContext";
-import { supabase } from "../lib/supabase";
+import { callsApi } from "../lib/api";
 import { Avatar } from "../components/ui/Avatar";
 import { formatDistanceToNow } from "date-fns";
 import type { Call, Profile } from "../types/database";
@@ -45,34 +45,14 @@ export function CallsPage() {
     if (!user) return;
     setLoading(true);
 
-    const { data: initiated } = await supabase
-      .from("calls")
-      .select("*, initiator:profiles!initiator_id(id, display_name, avatar_url, presence)")
-      .eq("initiator_id", user.id)
-      .order("started_at", { ascending: false })
-      .limit(100);
-
-    const { data: participated } = await supabase
-      .from("call_participants")
-      .select("call:calls(*, initiator:profiles!initiator_id(id, display_name, avatar_url, presence))")
-      .eq("user_id", user.id)
-      .limit(100);
-
-    const inbound = (participated ?? [])
-      .map((p) => (p as any).call)
-      .filter((c) => c && c.initiator_id !== user.id)
-      .map((c) => ({ ...(c as object), direction: "incoming" as const }));
-
-    const outbound = (initiated ?? []).map((c) => ({
-      ...(c as object),
-      direction: "outgoing" as const,
-    }));
-
-    const all = [...outbound, ...inbound].sort(
-      (a: any, b: any) => new Date(b.started_at ?? 0).getTime() - new Date(a.started_at ?? 0).getTime(),
-    );
-
-    setCalls(all as CallEntry[]);
+    const { data } = await callsApi.list();
+    if (data) {
+      const all = data.map((c: any) => ({
+        ...c,
+        direction: c.initiator_id === user.id ? "outgoing" : "incoming",
+      }));
+      setCalls(all as CallEntry[]);
+    }
     setLoading(false);
   };
 
@@ -82,14 +62,14 @@ export function CallsPage() {
 
   const handleDeleteCall = async (callId: string) => {
     if (!confirm("Remove this call log from history?")) return;
-    await supabase.from("calls").delete().eq("id", callId);
+    await callsApi.delete(callId);
     setCalls((prev) => prev.filter((c) => c.id !== callId));
   };
 
   const handleClearHistory = async () => {
     if (!confirm("Are you sure you want to clear all call history?")) return;
     if (!user) return;
-    await supabase.from("calls").delete().eq("initiator_id", user.id);
+    await callsApi.deleteByInitiator();
     setCalls([]);
   };
 

@@ -1,0 +1,41 @@
+name: Automated Safe Harbor Backup
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # Daily at 02:00 UTC
+  workflow_dispatch:
+
+jobs:
+  run-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_PRIVATE_KEY || secrets.ORACLE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.GCP_VM_IP || secrets.ORACLE_VM_IP }} >> ~/.ssh/known_hosts
+
+      - name: Trigger Remote Backup Script on GCP VM
+        run: |
+          ssh ubuntu@${{ secrets.GCP_VM_IP || secrets.ORACLE_VM_IP }} "sudo -E /opt/varta/scripts/backup.sh"
+
+      - name: Locate Latest Backup File
+        id: get_backup
+        run: |
+          LATEST_BACKUP=$(ssh ubuntu@${{ secrets.GCP_VM_IP || secrets.ORACLE_VM_IP }} "ls -t /opt/varta/backups/varta_backup_*.tar.gz | head -n 1")
+          echo "backup_path=${LATEST_BACKUP}" >> $GITHUB_OUTPUT
+          echo "backup_filename=$(basename ${LATEST_BACKUP})" >> $GITHUB_OUTPUT
+
+      - name: Download Backup Archive from GCP VM
+        run: |
+          mkdir -p ./downloads
+          scp ubuntu@${{ secrets.GCP_VM_IP || secrets.ORACLE_VM_IP }}:${{ steps.get_backup.outputs.backup_path }} ./downloads/
+          scp ubuntu@${{ secrets.GCP_VM_IP || secrets.ORACLE_VM_IP }}:${{ steps.get_backup.outputs.backup_path }}.sha256 ./downloads/
+
+      - name: Upload Backup to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.get_backup.outputs.backup_filename }}
+          path: ./downloads/*
+          retention-days: 90

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "../lib/supabase";
+import { invitationsApi } from "../lib/api";
+import { vartaWS } from "../lib/ws";
 import { useAuth } from "../contexts/AuthContext";
 import type { Invitation } from "../types/database";
 
@@ -14,11 +15,7 @@ export function useInvites() {
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("invitations")
-      .select("*")
-      .eq("inviter_id", user.id)
-      .order("created_at", { ascending: false });
+    const { data } = await invitationsApi.list();
     setInvites((data as Invitation[]) ?? []);
     setLoading(false);
   }, [user]);
@@ -26,33 +23,20 @@ export function useInvites() {
   useEffect(() => {
     load();
 
-    const channel = supabase
-      .channel("invitations_watch")
-      .on("postgres_changes", { event: "*", schema: "public", table: "invitations" }, load)
-      .subscribe();
+    // Listen for invitation updates via WebSocket
+    const unsub = vartaWS.on("invitations", "updated", load);
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { unsub(); };
   }, [load]);
 
   const sendInvite = async (email: string, customMessage?: string) => {
     if (!user || !profile) throw new Error("Not authenticated");
     setSending(true);
     try {
-      // 1. Insert invitation row
-      const { data: inv, error } = await supabase
-        .from("invitations")
-        .insert({
-          inviter_id: user.id,
-          email,
-          custom_message: customMessage || null,
-          status: "pending",
-        })
-        .select()
-        .single();
+      const { data: inv, error } = await invitationsApi.create({ email, customMessage });
+      if (error || !inv) throw new Error(error ?? "Failed to create invitation");
 
-      if (error || !inv) throw error ?? new Error("Failed to create invitation");
-
-      // 2. Call Vercel Serverless Function to send email
+      // Send email via backend
       try {
         const res = await fetch(`/api/sendInviteEmail`, {
           method: "POST",
@@ -79,10 +63,7 @@ export function useInvites() {
   };
 
   const revokeInvite = async (inviteId: string) => {
-    await supabase
-      .from("invitations")
-      .update({ status: "revoked" })
-      .eq("id", inviteId);
+    await invitationsApi.revoke(inviteId);
     await load();
   };
 
@@ -92,28 +73,12 @@ export function useInvites() {
 // ─── Accept an invite (anon/new user flow) ────────────────────────────────────
 
 export async function lookupInvite(token: string): Promise<Invitation | null> {
-  const { data } = await supabase
-    .from("invitations")
-    .select("*, inviter:profiles!inviter_id(id, display_name, avatar_url)")
-    .eq("invite_code", token)
-    .eq("status", "pending")
-    .maybeSingle();
-  return (data as Invitation | null);
+  const { data } = await import("../lib/api").then((m) =>
+    m.api.get<Invitation>(`/api/invitations/lookup?code=${encodeURIComponent(token)}`),
+  );
+  return data ?? null;
 }
 
-export async function acceptInvite(token: string, acceptorId: string): Promise<void> {
-  await supabase
-    .from("invitations")
-    .update({ status: "accepted", accepted_at: new Date().toISOString() })
-    .eq("invite_code", token)
-    .eq("status", "pending");
-
-  // Optional: auto-add inviter as contact
-  const invite = await lookupInvite(token);
-  if (invite && invite.inviter_id !== acceptorId) {
-    await supabase.from("contacts").upsert([
-      { user_id: acceptorId, contact_id: invite.inviter_id },
-      { user_id: invite.inviter_id, contact_id: acceptorId },
-    ], { onConflict: "user_id,contact_id" });
-  }
+export async function acceptInvite(token: string, _acceptorId: string): Promise<void> {
+  await invitationsApi.accept(token);
 }

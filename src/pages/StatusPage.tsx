@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useStories } from "../hooks/useStories";
 import { Avatar } from "../components/ui/Avatar";
 import { StoryViewer } from "../components/stories/StoryViewer";
-import { supabase } from "../lib/supabase";
+import { messagesApi } from "../lib/api";
 import type { StatusStory } from "../types/database";
 
 const BG_COLORS = [
@@ -39,14 +39,11 @@ export function StatusPage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setPosting(true);
-    const ext = file.name.split(".").pop();
-    const path = `status/${user.id}/${Date.now()}.${ext}`;
-    const { data, error } = await supabase.storage.from("media").upload(path, file, { upsert: true });
-    if (!error && data) {
-      const { data: urlData } = supabase.storage.from("media").getPublicUrl(data.path);
+    const res = await messagesApi.uploadMedia(file);
+    if (res) {
       await postStory({
         media_type: file.type.startsWith("video/") ? "video" : "photo",
-        media_url: urlData.publicUrl,
+        media_url: res,
       });
     }
     setPosting(false);
