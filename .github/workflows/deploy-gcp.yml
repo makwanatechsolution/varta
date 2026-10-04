@@ -105,7 +105,7 @@ jobs:
             fi
 
             # ── Pull latest images & deploy ──────────────────────────────────
-            docker compose down --remove-orphans 2>/dev/null || true
+            docker compose down -v --remove-orphans 2>/dev/null || true
             docker compose pull 2>/dev/null || true
             docker compose up -d --build
 
