@@ -8,12 +8,19 @@ import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle } from "luci
 import { profilesApi } from "../lib/api";
 
 export function LoginPage() {
-  const { signIn, signUp, resetPassword } = useAuth();
+  const { user, profile, signIn, signUp, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
   const [pairingToken, setPairingToken] = useState("");
   const [qrStatusText, setQrStatusText] = useState("Waiting for QR scan...");
   const [qrSvgMarkup, setQrSvgMarkup] = useState("");
+
+  // Automatically redirect if already logged in and profile loaded
+  useEffect(() => {
+    if (user && profile) {
+      navigate("/", { replace: true });
+    }
+  }, [user, profile, navigate]);
 
   useEffect(() => {
     if (activeTab === "qr" && !pairingToken) {
@@ -47,8 +54,7 @@ export function LoginPage() {
       if (payload?.token) {
         setQrStatusText("Device Authenticated! Redirecting...");
         setLoading(true);
-        // Normally we'd use Firebase signInWithCustomToken here, but for now just tell user it's WIP
-        setQrStatusText("QR Login is currently disabled during GCP migration.");
+        setQrStatusText("QR Login is currently under development.");
         setLoading(false);
       }
     });
@@ -191,11 +197,18 @@ export function LoginPage() {
       } else {
         await signIn(email, password);
       }
-      navigate("/");
     } catch (err: any) {
       const msg = err.message || "Authentication failed";
-      if (msg.toLowerCase().includes("network") || msg.includes("Failed to fetch")) {
-        setError({ form: "No connection to server. Please check your network connection." });
+      if (msg.includes("auth/operation-not-allowed") || msg.includes("operation-not-allowed")) {
+        setError({
+          form: "Email/Password sign-in is disabled in your Firebase Console. Go to Firebase Console -> Authentication -> Sign-in method -> Enable 'Email/Password'.",
+        });
+      } else if (msg.includes("auth/user-not-found") || msg.includes("auth/wrong-password") || msg.includes("auth/invalid-credential")) {
+        setError({ form: "Invalid email or password. If you don't have an account, switch to 'Sign Up' above." });
+      } else if (msg.includes("auth/email-already-in-use")) {
+        setError({ form: "This email is already in use. Please sign in instead." });
+      } else if (msg.toLowerCase().includes("network") || msg.includes("Failed to fetch")) {
+        setError({ form: "Cannot reach backend. Please ensure Render backend is running." });
       } else if (msg.includes("password")) {
         setError({ password: msg });
       } else {

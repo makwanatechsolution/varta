@@ -1,19 +1,22 @@
 /**
  * Varta WebSocket Manager
- * Replaces Supabase Realtime. Connects to our GCP Express server's WS endpoint.
+ * Connects to our Express server's WS endpoint.
  * Handles auto-reconnect, subscriptions, and event routing.
  */
 
 import { firebaseAuth } from "./firebase";
 
 const WS_URL = (() => {
-  const apiUrl = (import.meta.env.VITE_API_URL as string | undefined) || "";
+  const defaultUrl =
+    typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+      ? "ws://localhost:4000/ws"
+      : "wss://api.chat.makwanatechsolution.in/ws";
+
+  const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
   if (apiUrl) {
     return apiUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
   }
-  // Relative: same host, switch protocol
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${location.host}/ws`;
+  return defaultUrl;
 })();
 
 type EventCallback = (payload: unknown) => void;

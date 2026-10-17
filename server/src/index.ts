@@ -50,18 +50,22 @@ const db = process.env.DATABASE_URL
       connectionTimeoutMillis: 5_000,
     });
 
-db.connect().then(() => console.log("[PostgreSQL] Connected")).catch(console.error);
+// Catch errors on idle clients so they do not crash the Node.js process
+db.on("error", (err) => {
+  console.error("[PostgreSQL] Unexpected error on idle client:", err.message);
+});
+
+// Verify connection on startup
+db.query("SELECT 1")
+  .then(() => console.log("[PostgreSQL] Connected and ready"))
+  .catch((err) => console.error("[PostgreSQL] Initial connection failed:", err.message));
 
 // ─── Express Setup ───────────────────────────────────────────────────────────
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "*").split(",").map(o => o.trim());
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) cb(null, true);
-    else cb(new Error("Not allowed by CORS"));
-  },
+  origin: true,
   credentials: true,
 }));
 app.use(express.json({ limit: "10mb" }));
@@ -98,18 +102,39 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 function uid(req: Request): string { return (req as any).uid; }
 
+const ADMIN_EMAILS = ["yash.makwana.b@gmail.com"];
+
 // ─── Profile Auto-Create Helper ───────────────────────────────────────────────
 async function ensureProfile(req: Request) {
   const userId = uid(req);
-  const { rows } = await db.query("SELECT id FROM profiles WHERE id = $1", [userId]);
-  if (rows.length === 0) {
-    const displayName = (req as any).displayName || "User";
-    const avatarUrl = (req as any).avatarUrl || null;
-    await db.query(
-      `INSERT INTO profiles (id, display_name, avatar_url, is_approved, is_admin, created_at, updated_at)
-       VALUES ($1, $2, $3, false, false, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
-      [userId, displayName, avatarUrl],
-    );
+  const userEmail = ((req as any).email || "").toLowerCase().trim();
+  const isTargetAdmin = ADMIN_EMAILS.includes(userEmail);
+
+  try {
+    const { rows } = await db.query("SELECT id, is_approved, is_admin FROM profiles WHERE id = $1", [userId]);
+    if (rows.length === 0) {
+      const displayName = (req as any).displayName || userEmail.split("@")[0] || "User";
+      const avatarUrl = (req as any).avatarUrl || null;
+
+      // Determine if first user or designated admin
+      const countRes = await db.query("SELECT COUNT(*) FROM profiles").catch(() => ({ rows: [{ count: 0 }] }));
+      const isFirstUser = parseInt(countRes.rows[0]?.count || "0", 10) === 0;
+      const isAdmin = isFirstUser || isTargetAdmin;
+
+      await db.query(
+        `INSERT INTO profiles (id, display_name, avatar_url, is_approved, is_admin, created_at, updated_at)
+         VALUES ($1, $2, $3, true, $4, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+        [userId, displayName, avatarUrl, isAdmin],
+      );
+      console.log(`[Profile] Created profile for user ${userId} (${userEmail}) (isAdmin: ${isAdmin}, approved: true)`);
+    } else {
+      if (isTargetAdmin && (!rows[0].is_admin || !rows[0].is_approved)) {
+        await db.query("UPDATE profiles SET is_admin = true, is_approved = true, updated_at = NOW() WHERE id = $1", [userId]);
+        console.log(`[Profile] Promoted designated admin user ${userId} (${userEmail})`);
+      }
+    }
+  } catch (err) {
+    console.error("[ensureProfile] Error creating/updating profile:", err);
   }
 }
 
@@ -213,7 +238,7 @@ app.get("/health", (_req, res) => {
     service: "varta-backend",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    cloud: "Google Cloud Platform (Always Free - 0 Rupee)",
+    cloud: "Render Cloud Platform",
     wsClients: connections.size,
   });
 });
@@ -221,11 +246,8 @@ app.get("/health", (_req, res) => {
 app.get("/api/status", (_req, res) => {
   res.json({
     status: "healthy",
-    cloudProvider: "Google Cloud Platform",
-    pricingTier: "Always Free Lifetime ($0.00 / 0 INR)",
-    killSwitchActive: true,
-    watchdogInterval: "15 minutes",
-    storageSafeGuards: "Automated Daily Backup + Offsite Snapshot",
+    cloudProvider: "Render",
+    wsClients: connections.size,
     timestamp: new Date().toISOString(),
   });
 });
@@ -1138,6 +1160,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 server.listen(PORT, () => {
   console.log(`[Varta Backend] Running on port ${PORT}`);
   console.log(`[WebSocket] WS server ready at /ws`);
-  console.log(`[Zero-Cost Safeguard] GCP Always Free Lifetime Host Active`);
-  console.log(`[Domain] APP_URL = ${process.env.APP_URL || "http://localhost"}`);
+  console.log(`[Cloud] Render Production Host Active`);
+  console.log(`[Domain] APP_URL = ${process.env.APP_URL || "https://api.chat.makwanatechsolution.in"}`);
 });

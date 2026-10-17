@@ -1,13 +1,22 @@
 /**
  * Varta API Client
- * Replaces Supabase client. All data operations go through our GCP Express server.
+ * Replaces Supabase client. All data operations go through our Express backend service.
  * Auth is handled by Firebase Auth (idToken sent as Bearer).
  */
 
 import { firebaseAuth } from "./firebase";
 
-// The GCP backend URL — populated from env, falls back to relative path (same origin via Nginx)
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
+// The backend URL — populated from env, falls back to the production Render domain or localhost
+const DEFAULT_API_URL =
+  typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? "http://localhost:4000"
+    : "https://api.chat.makwanatechsolution.in";
+
+const BASE_URL = ((import.meta.env.VITE_API_URL as string | undefined)?.trim() || DEFAULT_API_URL).replace(/\/$/, "");
+
+if (typeof window !== "undefined") {
+  console.log("[Varta API] Backend URL:", BASE_URL);
+}
 
 // ─── Token Helper ──────────────────────────────────────────────────────────────
 

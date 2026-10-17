@@ -30,21 +30,73 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const ADMIN_EMAILS = ["yash.makwana.b@gmail.com"];
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async () => {
+  const fetchProfile = async (retry = 0) => {
     try {
       const { data, error } = await profilesApi.getMe();
+      const currentUserEmail = (firebaseAuth.currentUser?.email || "").toLowerCase().trim();
+      const isTargetAdmin = ADMIN_EMAILS.includes(currentUserEmail);
+
       if (data) {
-        setProfile(data as Profile);
+        setProfile({
+          ...data,
+          is_admin: isTargetAdmin ? true : (data as Profile).is_admin,
+          is_approved: isTargetAdmin ? true : (data as Profile).is_approved,
+        } as Profile);
       } else {
-        console.warn("fetchProfile error:", error);
+        console.warn("[Auth] fetchProfile warning:", error);
+        if (isTargetAdmin && firebaseAuth.currentUser) {
+          const u = firebaseAuth.currentUser;
+          setProfile({
+            id: u.uid,
+            username: u.email?.split("@")[0] || "admin",
+            display_name: u.displayName || "Admin",
+            avatar_url: u.photoURL || null,
+            bio: "Varta Platform Administrator",
+            phone: null,
+            last_seen: new Date().toISOString(),
+            presence: "online",
+            custom_status: null,
+            custom_status_expires_at: null,
+            status_privacy: "everyone",
+            is_approved: true,
+            is_admin: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as Profile);
+        }
+        if (retry < 2) setTimeout(() => fetchProfile(retry + 1), 2000);
       }
     } catch (err) {
-      console.warn("fetchProfile failed:", err);
+      console.warn("[Auth] fetchProfile failed:", err);
+      const currentUserEmail = (firebaseAuth.currentUser?.email || "").toLowerCase().trim();
+      if (ADMIN_EMAILS.includes(currentUserEmail) && firebaseAuth.currentUser) {
+        const u = firebaseAuth.currentUser;
+        setProfile({
+          id: u.uid,
+          username: u.email?.split("@")[0] || "admin",
+          display_name: u.displayName || "Admin",
+          avatar_url: u.photoURL || null,
+          bio: "Varta Platform Administrator",
+          phone: null,
+          last_seen: new Date().toISOString(),
+          presence: "online",
+          custom_status: null,
+          custom_status_expires_at: null,
+          status_privacy: "everyone",
+          is_approved: true,
+          is_admin: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Profile);
+      }
+      if (retry < 2) setTimeout(() => fetchProfile(retry + 1), 2000);
     }
   };
 
@@ -53,7 +105,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (firebaseUser) {
         Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
         setUser(firebaseUser as AuthUser);
-        // Give API client a moment to pick up the new token
         await fetchProfile();
       } else {
         setUser(null);
