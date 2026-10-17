@@ -11,7 +11,7 @@ create type public.presence_status as enum ('online', 'away', 'busy', 'dnd', 'of
 create type public.privacy_level as enum ('everyone', 'contacts', 'close_friends', 'nobody');
 
 create table public.profiles (
-  id text primary key  on delete cascade,
+  id text primary key,
   username text unique,
   display_name text not null default '',
   avatar_url text,
@@ -461,3 +461,18 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 \$\$;
+
+-- ============================================================
+-- ADMIN SETTINGS
+-- ============================================================
+create table if not exists public.admin_settings (
+  id text primary key default 'singleton',
+  auto_approve_users boolean default false,
+  require_invite_code boolean default false,
+  maintenance_mode boolean default false,
+  updated_at timestamptz default now() not null
+);
+
+insert into public.admin_settings (id, auto_approve_users, require_invite_code, maintenance_mode)
+values ('singleton', false, false, false)
+on conflict (id) do nothing;

@@ -45,8 +45,8 @@ jobs:
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ env.VERCEL_TOKEN }}
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_APP_URL: ${{ secrets.VITE_APP_URL || secrets.APP_URL }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
@@ -58,13 +58,12 @@ jobs:
           VITE_TURN_SERVER_URL: ${{ secrets.VITE_TURN_SERVER_URL }}
           VITE_TURN_USERNAME: ${{ secrets.VITE_TURN_USERNAME }}
           VITE_TURN_CREDENTIAL: ${{ secrets.VITE_TURN_CREDENTIAL }}
-          VITE_APP_URL: ${{ secrets.VITE_APP_URL }}
 
       - name: Deploy Project Artifacts to Vercel
         run: >
           vercel deploy --prebuilt --prod --token=${{ env.VERCEL_TOKEN }}
-          -e VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}"
-          -e VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+          -e VITE_API_URL="${{ secrets.VITE_API_URL }}"
+          -e VITE_APP_URL="${{ secrets.VITE_APP_URL || secrets.APP_URL }}"
           -e VITE_FIREBASE_API_KEY="${{ secrets.VITE_FIREBASE_API_KEY }}"
           -e VITE_FIREBASE_AUTH_DOMAIN="${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}"
           -e VITE_FIREBASE_PROJECT_ID="${{ secrets.VITE_FIREBASE_PROJECT_ID }}"
@@ -76,8 +75,12 @@ jobs:
           -e VITE_TURN_SERVER_URL="${{ secrets.VITE_TURN_SERVER_URL }}"
           -e VITE_TURN_USERNAME="${{ secrets.VITE_TURN_USERNAME }}"
           -e VITE_TURN_CREDENTIAL="${{ secrets.VITE_TURN_CREDENTIAL }}"
-          -e VITE_APP_URL="${{ secrets.VITE_APP_URL }}"
-          -e SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}"
-          -e SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+          -e APP_URL="${{ secrets.APP_URL || secrets.VITE_APP_URL }}"
           -e RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}"
           -e FIREBASE_SERVICE_ACCOUNT_KEY='${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}'
+
+      - name: Trigger Backend Redeploy (if configured)
+        if: "${{ secrets.RENDER_DEPLOY_HOOK != '' }}"
+        run: |
+          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "Backend redeploy triggered successfully via GitHub Actions."

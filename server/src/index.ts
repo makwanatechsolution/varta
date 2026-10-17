@@ -31,16 +31,24 @@ if (!getApps().length) {
 }
 
 // ─── PostgreSQL Pool ─────────────────────────────────────────────────────────
-const db = new Pool({
-  host: process.env.DB_HOST || "db",
-  port: Number(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME || "postgres",
-  user: process.env.DB_USER || "postgres",
-  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || "varta_secure_free_db_pass_2026",
-  max: 20,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-});
+const db = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+    })
+  : new Pool({
+      host: process.env.DB_HOST || "db",
+      port: Number(process.env.DB_PORT) || 5432,
+      database: process.env.DB_NAME || "postgres",
+      user: process.env.DB_USER || "postgres",
+      password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || "varta_secure_free_db_pass_2026",
+      max: 20,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+    });
 
 db.connect().then(() => console.log("[PostgreSQL] Connected")).catch(console.error);
 
