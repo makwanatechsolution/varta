@@ -80,7 +80,9 @@ jobs:
           -e FIREBASE_SERVICE_ACCOUNT_KEY='${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}'
 
       - name: Trigger Backend Redeploy (if configured)
-        if: "${{ secrets.RENDER_DEPLOY_HOOK != '' }}"
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        if: env.RENDER_DEPLOY_HOOK != ''
         run: |
-          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          curl -s -X POST "$RENDER_DEPLOY_HOOK"
           echo "Backend redeploy triggered successfully via GitHub Actions."
