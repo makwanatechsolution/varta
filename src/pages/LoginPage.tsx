@@ -15,12 +15,12 @@ export function LoginPage() {
   const [qrStatusText, setQrStatusText] = useState("Waiting for QR scan...");
   const [qrSvgMarkup, setQrSvgMarkup] = useState("");
 
-  // Automatically redirect if already logged in and profile loaded
+  // Automatically redirect if already logged in
   useEffect(() => {
-    if (user && profile) {
+    if (user) {
       navigate("/", { replace: true });
     }
-  }, [user, profile, navigate]);
+  }, [user, navigate]);
 
   useEffect(() => {
     if (activeTab === "qr" && !pairingToken) {
@@ -147,20 +147,19 @@ export function LoginPage() {
     try {
       if (provider === "google") {
         try {
+          const res = await signInWithGooglePopup();
+          if (res?.user) {
+            navigate("/", { replace: true });
+            return;
+          }
+        } catch (popupErr: any) {
+          if (popupErr?.code === "auth/popup-closed-by-user") {
+            setLoading(false);
+            return;
+          }
+          console.warn("Popup sign-in failed, attempting redirect:", popupErr);
           await signInWithGoogleRedirect();
           return;
-        } catch (redirectErr) {
-          console.warn("Firebase redirect failed, attempting popup:", redirectErr);
-          try {
-            const res = await signInWithGooglePopup();
-            if (res?.user) {
-              navigate("/", { replace: true });
-              return;
-            }
-          } catch (popupErr: any) {
-            console.warn("Firebase popup failed:", popupErr);
-            throw popupErr;
-          }
         }
       }
     } catch (e: any) {
@@ -197,6 +196,7 @@ export function LoginPage() {
       } else {
         await signIn(email, password);
       }
+      navigate("/", { replace: true });
     } catch (err: any) {
       const msg = err.message || "Authentication failed";
       if (msg.includes("auth/operation-not-allowed") || msg.includes("operation-not-allowed")) {

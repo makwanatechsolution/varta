@@ -105,12 +105,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (firebaseUser) {
         Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
         setUser(firebaseUser as AuthUser);
-        await fetchProfile();
+
+        // Immediately set an active profile so dashboard opens without waiting for cold-start server
+        const emailLower = (firebaseUser.email || "").toLowerCase().trim();
+        const isAdmin = ADMIN_EMAILS.includes(emailLower);
+        setProfile({
+          id: firebaseUser.uid,
+          username: firebaseUser.email?.split("@")[0] || "user",
+          display_name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "User",
+          avatar_url: firebaseUser.photoURL || null,
+          bio: "",
+          phone: null,
+          last_seen: new Date().toISOString(),
+          presence: "online",
+          custom_status: null,
+          custom_status_expires_at: null,
+          status_privacy: "everyone",
+          is_approved: true,
+          is_admin: isAdmin,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Profile);
+
+        setLoading(false);
+        // Sync database profile in background
+        fetchProfile();
       } else {
         setUser(null);
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe;
   }, []);
