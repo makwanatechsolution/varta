@@ -460,17 +460,17 @@ app.get("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   let query = `SELECT m.*,
     row_to_json(p) AS sender,
     (SELECT json_agg(json_build_object('id', r.id, 'emoji', r.emoji, 'user_id', r.user_id, 'profile', json_build_object('id', rp.id, 'display_name', rp.display_name))) FROM message_reactions r JOIN profiles rp ON rp.id = r.user_id WHERE r.message_id = m.id) AS reactions,
-    (SELECT row_to_json(rm) FROM messages rm WHERE rm.id = m.reply_to_id) AS reply_to
+    (SELECT row_to_json(reply) FROM (SELECT rm.*, row_to_json(rp) AS sender FROM messages rm LEFT JOIN profiles rp ON rp.id = rm.sender_id WHERE rm.id = m.reply_to_id AND rm.is_deleted = false) reply) AS reply_to
    FROM messages m LEFT JOIN profiles p ON p.id = m.sender_id
    WHERE m.conversation_id = $1 AND m.is_deleted = false`;
 
   const vals: any[] = [convId];
   if (pinned) { query += ` AND m.is_pinned = true`; }
   if (cursor) { query += ` AND m.created_at < $${vals.length + 1}`; vals.push(cursor); }
-  query += ` ORDER BY m.created_at ${pinned ? "DESC" : "ASC"} LIMIT 100`;
+  query += ` ORDER BY m.created_at DESC LIMIT 100`;
 
   const { rows } = await db.query(query, vals);
-  res.json(rows);
+  res.json(pinned ? rows : rows.reverse());
 });
 
 // POST /api/conversations/:id/messages
@@ -479,6 +479,12 @@ app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   const myId = uid(req);
   const { content, type = "text", media_url, gif_url, reply_to_id } = req.body;
 
+  let replyTo = null;
+  if (reply_to_id) {
+    const result = await db.query("SELECT m.*, row_to_json(p) AS sender FROM messages m LEFT JOIN profiles p ON p.id = m.sender_id WHERE m.id = $1 AND m.conversation_id = $2 AND m.is_deleted = false", [reply_to_id, convId]);
+    if (!result.rows.length) { res.status(400).json({ error: "The message being replied to is unavailable." }); return; }
+    replyTo = result.rows[0];
+  }
   const msgId = uuidv4();
   const { rows } = await db.query(
     `INSERT INTO messages (id, conversation_id, sender_id, type, content, media_url, gif_url, reply_to_id, is_edited, is_deleted, created_at, updated_at)
@@ -489,7 +495,7 @@ app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
 
   // Fetch sender profile
   const { rows: profRows } = await db.query("SELECT id, display_name, avatar_url FROM profiles WHERE id = $1", [myId]);
-  const fullMsg = { ...msg, sender: profRows[0] || null, reactions: [], reply_to: null };
+  const fullMsg = { ...msg, sender: profRows[0] || null, reactions: [], reply_to: replyTo };
 
   // Update conversation last_message_at
   await db.query("UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1", [convId]);

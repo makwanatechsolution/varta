@@ -81,16 +81,18 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
 
       <div className={clsx("max-w-[min(78%,34rem)] min-w-0 flex flex-col", isOwn ? "items-end" : "items-start")}>
         {/* Reply preview */}
-        {message.reply_to_id && (message as Message & { reply_to?: { content: string | null; sender?: { display_name: string } } }).reply_to && (
+        {message.reply_to_id && (
           <div className={clsx(
             "mb-1 rounded-xl border-l-2 border-primary bg-surface px-3 py-2 text-xs shadow-sm w-fit max-w-full",
             isOwn ? "ml-auto" : "",
           )}>
             <p className="font-semibold text-primary mb-0.5">
-              {(message as Message & { reply_to?: { sender?: { display_name: string } } }).reply_to?.sender?.display_name ?? "Reply"}
+              {message.reply_to?.sender?.display_name ?? "Reply"}
             </p>
             <p className="truncate text-muted">
-              {(message as Message & { reply_to?: { content: string | null } }).reply_to?.content ?? ""}
+              {!message.reply_to || message.reply_to.is_deleted
+                ? "Message unavailable"
+                : message.reply_to.content || ({ image: "Photo", video: "Video", audio: "Voice message", gif: "GIF" }[message.reply_to.type as string] ?? "Message")}
             </p>
           </div>
         )}
@@ -124,7 +126,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
           ) : message.type === "audio" && message.media_url ? (
             <VoicePlayer url={message.media_url} isOwn={isOwn} />
           ) : (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.content}</p>
           )}
 
           <div className="mt-1 flex flex-wrap items-center justify-end gap-1.5">
@@ -188,7 +190,7 @@ export function MessageBubble({ message, isOwn, onReply, onEdit, onDelete }: Mes
         {/* Floating Quick Action Toolbar (WhatsApp/Teams style) */}
         <div
           className={clsx(
-            "absolute -top-3.5 z-20 flex items-center gap-1 px-1.5 py-1 rounded-full border backdrop-blur-md shadow-md opacity-0 group-hover:opacity-100 transition-all duration-150 scale-95 group-hover:scale-100",
+            "absolute -top-3.5 z-20 flex items-center gap-1 px-1.5 py-1 rounded-full border backdrop-blur-md shadow-md opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-all duration-150 scale-95 group-hover:scale-100",
             isOwn ? "right-2" : "left-2"
           )}
           style={{

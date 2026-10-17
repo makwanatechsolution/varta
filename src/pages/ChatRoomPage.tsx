@@ -42,12 +42,15 @@ function useConversationInfo(conversationId: string | undefined, myId: string | 
   useEffect(() => {
     if (!conversationId || !myId) return;
 
+    let cancelled = false;
+    setConv(null); setOtherUser(null);
     conversationsApi.getById(conversationId).then(({ data }) => {
-      if (!data) return;
+      if (cancelled || !data) return;
       setConv(data as Conversation);
       const other = (data as Conversation).members?.find((m) => m.user_id !== myId)?.profile;
       if (other) setOtherUser(other as Profile);
     });
+    return () => { cancelled = true; };
   }, [conversationId, myId]);
 
   // Real-time presence is handled globally now via WebSocket.
@@ -62,9 +65,13 @@ export function ChatRoomPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { chatWallpaper, fontSize, enterToSend, resolvedTheme } = useSettings();
-  const { messages, loading, sendMessage, editMessage, deleteMessage } = useMessages(id);
+  const { messages, loading, error: loadError, reload, sendMessage, editMessage, deleteMessage } = useMessages(id);
   const { typingUsers, sendTyping } = useTyping(id, user?.id);
   const { conv, otherUser, title } = useConversationInfo(id, user?.id);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
   const [gifOpen, setGifOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -75,6 +82,11 @@ export function ChatRoomPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setText(""); setReplyTo(null); setEditingMsg(null); setEditText("");
+    setGifOpen(false); setShowEmojiComposer(false); setIsVoiceRecording(false); setActionError(null);
+  }, [id]);
 
   // Click-outside listener for Emoji composer
   useEffect(() => {
@@ -174,40 +186,50 @@ export function ChatRoomPage() {
   // ── Emoji picker theme follows app theme ────────────────────────────────────
   const emojiTheme = resolvedTheme === "light" ? Theme.LIGHT : Theme.DARK;
 
-  const handleSend = async () => {
+  const runAction = async (action: () => Promise<void>) => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true); setActionError(null);
+    try { await action(); }
+    catch (err) { setActionError(err instanceof Error ? err.message : "Something went wrong. Please try again."); }
+    finally { sendingRef.current = false; setSending(false); }
+  };
+
+  const handleSend = () => runAction(async () => {
     if (editingMsg) {
       if (!editText.trim()) return;
       await editMessage(editingMsg.id, editText);
-      setEditingMsg(null);
-      setEditText("");
+      setEditingMsg(null); setEditText("");
       return;
     }
     if (!text.trim()) return;
-    await sendMessage(text, "text", replyTo ? { reply_to_id: replyTo.id } : undefined);
-    setText("");
-    setReplyTo(null);
-  };
+    await sendMessage(text, "text", replyTo ? { reply_to_id: replyTo.id, reply_to: replyTo } : undefined);
+    setText(""); setReplyTo(null);
+  });
 
   const handleGif = async (gif: GifResult) => {
     setGifOpen(false);
-    await sendMessage("", "gif", { gif_url: gif.url, media_url: gif.url });
+    await sendMessage("", "gif", { gif_url: gif.url, media_url: gif.url, reply_to_id: replyTo?.id, reply_to: replyTo });
+    setReplyTo(null);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !id) return;
     const res = await messagesApi.uploadMedia(file);
-    if (!res) return;
+    if (!res) throw new Error("Upload failed. Please try again.");
     const isVideo = file.type.startsWith("video/");
-    await sendMessage("", isVideo ? "video" : "image", { media_url: res });
+    await sendMessage("", isVideo ? "video" : "image", { media_url: res, reply_to_id: replyTo?.id, reply_to: replyTo });
+    setReplyTo(null);
     e.target.value = "";
   };
 
   const handleVoiceSend = async (blob: Blob) => {
     if (!user || !id) return;
     const res = await messagesApi.uploadMedia(blob, `audio_${Date.now()}.webm`);
-    if (!res) return;
-    await sendMessage("", "audio", { media_url: res });
+    if (!res) throw new Error("Upload failed. Please try again.");
+    await sendMessage("", "audio", { media_url: res, reply_to_id: replyTo?.id, reply_to: replyTo });
+    setReplyTo(null);
   };
 
   const startEdit = (msg: Message) => {
@@ -290,6 +312,7 @@ export function ChatRoomPage() {
         )}
         style={wallpaperStyle}
       >
+        {loadError && <div role="alert" className="rounded-xl border p-4 text-sm" style={{ backgroundColor: "var(--bg-surface)" }}>{loadError} <button type="button" onClick={reload} className="underline">Try again</button></div>}
         {loading && (
           <div className="flex justify-center p-4">
             <div
@@ -330,9 +353,9 @@ export function ChatRoomPage() {
               <MessageBubble
                 message={msg}
                 isOwn={msg.sender_id === user?.id}
-                onReply={() => setReplyTo(msg)}
+                onReply={msg.id.startsWith("temp-") ? undefined : () => { cancelEdit(); setReplyTo(msg); composerRef.current?.focus(); }}
                 onEdit={() => startEdit(msg)}
-                onDelete={() => deleteMessage(msg.id)}
+                onDelete={() => runAction(() => deleteMessage(msg.id))}
               />
             </div>
           );
@@ -354,7 +377,9 @@ export function ChatRoomPage() {
           paddingBottom: "max(8px, env(safe-area-inset-bottom, 8px))",
         }}
       >
-        <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGif} />
+        {actionError && <div role="alert" className="px-3 py-2 text-sm text-red-500">{actionError}</div>}
+        {sending && <p role="status" className="px-3 text-xs text-muted">Sending?</p>}
+        <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={(gif) => runAction(() => handleGif(gif))} />
 
         {/* Emoji picker — theme-aware */}
         {showEmojiComposer && (
@@ -364,6 +389,7 @@ export function ChatRoomPage() {
             style={{ borderColor: "var(--border-subtle)" }}
           >
             <EmojiPicker
+              width="min(350px, calc(100vw - 32px))"
               theme={emojiTheme}
               onEmojiClick={(emojiData: EmojiClickData) => {
                 setText((prev) => prev + emojiData.emoji);
@@ -384,7 +410,7 @@ export function ChatRoomPage() {
                 {replyTo.sender?.display_name ?? "Message"}
               </p>
               <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                {replyTo.type === "gif" ? "GIF" : replyTo.content}
+                {replyTo.content || ({ image: "Photo", video: "Video", audio: "Voice message", gif: "GIF" }[replyTo.type as string] ?? "Message")}
               </p>
             </div>
             <button
@@ -451,25 +477,29 @@ export function ChatRoomPage() {
             type="file"
             accept="image/*,video/*"
             className="hidden"
-            onChange={handleImageUpload}
+            onChange={(e) => { void runAction(() => handleImageUpload(e)); }}
           />
 
           {!isVoiceRecording ? (
             <div className="flex-1 relative">
               <textarea
+                ref={composerRef}
+                aria-label={editingMsg ? "Edit message" : "Message"}
+                readOnly={sending}
                 value={editingMsg ? editText : text}
                 onChange={(e) => {
                   if (editingMsg) setEditText(e.target.value);
                   else { setText(e.target.value); sendTyping(); }
                 }}
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (enterToSend) {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
                   } else {
                     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); }
                   }
                 }}
-                placeholder={editingMsg ? "Edit message..." : "Message (Enter to send, Shift+Enter for new line)"}
+                placeholder={editingMsg ? "Edit message..." : enterToSend ? "Message (Shift+Enter for new line)" : "Message (Ctrl/?+Enter to send)"}
                 rows={1}
                 className="w-full resize-none rounded-2xl px-4 py-3 text-sm outline-none border max-h-32 scrollbar-hide transition-shadow focus:ring-2"
                 style={{
@@ -481,7 +511,7 @@ export function ChatRoomPage() {
             </div>
           ) : (
             <VoiceRecorder
-              onSend={handleVoiceSend}
+              onSend={(blob) => runAction(() => handleVoiceSend(blob))}
               onCancel={() => setIsVoiceRecording(false)}
               onRecordingChange={setIsVoiceRecording}
               className="flex-1 mb-1"
@@ -493,6 +523,8 @@ export function ChatRoomPage() {
               <button
                 type="button"
                 onClick={handleSend}
+                disabled={sending}
+                aria-label={editingMsg ? "Save message" : "Send message"}
                 className="rounded-full p-3 shadow-md transition-transform hover:scale-105 active:scale-95 text-white"
                 style={{ backgroundColor: editingMsg ? "#F59E0B" : "var(--color-primary)" }}
               >

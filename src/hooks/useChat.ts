@@ -44,10 +44,12 @@ export function useConversations() {
       });
     });
 
+    const unsubConnected = vartaWS.on("connection", "connected", silentReload);
     const unsubConv = vartaWS.on("conversations", "updated", silentReload);
     const unsubProfile = vartaWS.on("profiles", "updated", silentReload);
 
     return () => {
+      unsubConnected();
       unsubMsg();
       unsubConv();
       unsubProfile();
@@ -64,39 +66,37 @@ export function useMessages(conversationId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const activeConversation = useRef(conversationId);
+  activeConversation.current = conversationId;
+  const [error, setError] = useState<string | null>(null);
+
   const load = useCallback(async (silent = false) => {
     if (!conversationId || !user) return;
     if (!silent) setLoading(true);
     const { data, error } = await messagesApi.list(conversationId);
-    if (error) console.error("Error loading messages:", error);
-    setMessages((data as Message[]) ?? []);
+    if (activeConversation.current !== conversationId) return;
+    setError(error);
+    if (!error) setMessages((prev) => {
+      const loaded = (data as Message[]) ?? [];
+      return [...loaded, ...prev.filter((m) => m.id.startsWith("temp-"))];
+    });
     if (!silent) setLoading(false);
   }, [conversationId, user]);
 
   useEffect(() => {
     if (!conversationId || !user) return;
+    setMessages([]);
+    setError(null);
     load(false);
+    const refresh = () => { if (document.visibilityState === "visible") load(true); };
+    const unsubConnected = vartaWS.on("connection", "connected", () => load(true));
+    document.addEventListener("visibilitychange", refresh);
 
     // WebSocket events for this conversation
     const unsubInsert = vartaWS.on(`messages:${conversationId}`, "insert", (payload: any) => {
       const newMsg = payload as Message;
       setMessages((prev) => {
         if (prev.find((m) => m.id === newMsg.id)) return prev;
-        // Replace matching optimistic temp message
-        const tempIdx = prev.findIndex(
-          (m) =>
-            m.id.startsWith("temp-") &&
-            m.sender_id === newMsg.sender_id &&
-            m.type === newMsg.type &&
-            (m.content === newMsg.content ||
-              (m as any).gif_url === (newMsg as any).gif_url ||
-              (m as any).media_url === (newMsg as any).media_url),
-        );
-        if (tempIdx !== -1) {
-          const next = [...prev];
-          next[tempIdx] = newMsg;
-          return next;
-        }
         return [...prev, newMsg];
       });
     });
@@ -108,14 +108,7 @@ export function useMessages(conversationId: string | undefined) {
         if (idx === -1) return prev;
         if (updated.is_deleted) return prev.filter((m) => m.id !== updated.id);
         const next = [...prev];
-        next[idx] = {
-          ...next[idx],
-          content: updated.content,
-          is_edited: updated.is_edited,
-          is_deleted: updated.is_deleted,
-          is_starred: updated.is_starred,
-          is_pinned: updated.is_pinned,
-        } as Message;
+        next[idx] = { ...next[idx], ...updated };
         return next;
       });
     });
@@ -145,6 +138,8 @@ export function useMessages(conversationId: string | undefined) {
     });
 
     return () => {
+      unsubConnected();
+      document.removeEventListener("visibilitychange", refresh);
       unsubInsert();
       unsubUpdate();
       unsubReactionAdd();
@@ -181,33 +176,37 @@ export function useMessages(conversationId: string | undefined) {
 
     setMessages((prev) => [...prev, newMessage as unknown as Message]);
 
-    const { error } = await messagesApi.send(conversationId, {
+    const { data, error } = await messagesApi.send(conversationId, {
       content: content ? content.trim() : undefined,
       type,
       ...extras,
     } as any);
 
     if (error) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      if (activeConversation.current === conversationId) setMessages((prev) => prev.filter((m) => m.id !== tempId));
       throw new Error(error);
     }
 
-    // Fire-and-forget push notification (server handles push internally)
+    if (activeConversation.current !== conversationId) return;
+    if (data) setMessages((prev) => {
+      const withoutTemp = prev.filter((m) => m.id !== tempId);
+      return withoutTemp.some((m) => m.id === data.id) ? withoutTemp : [...withoutTemp, data as Message];
+    });
   };
 
   const editMessage = async (messageId: string, newContent: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, content: newContent.trim(), is_edited: true } : m)),
-    );
-    await messagesApi.update(messageId, newContent.trim());
+    const { error } = await messagesApi.update(messageId, newContent.trim());
+    if (error) throw new Error(error);
+    setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, content: newContent.trim(), is_edited: true } : m));
   };
 
   const deleteMessage = async (messageId: string) => {
+    const { error } = await messagesApi.delete(messageId);
+    if (error) throw new Error(error);
     setMessages((prev) => prev.filter((m) => m.id !== messageId));
-    await messagesApi.delete(messageId);
   };
 
-  return { messages, loading, sendMessage, editMessage, deleteMessage };
+  return { messages, loading, error, reload: () => load(false), sendMessage, editMessage, deleteMessage };
 }
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────

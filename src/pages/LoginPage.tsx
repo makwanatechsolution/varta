@@ -8,7 +8,7 @@ import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle } from "luci
 import { profilesApi } from "../lib/api";
 
 export function LoginPage() {
-  const { user, profile, signIn, signUp, resetPassword } = useAuth();
+  const { user, signIn, signUp, resetPassword } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
   const [pairingToken, setPairingToken] = useState("");

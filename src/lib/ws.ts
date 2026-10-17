@@ -35,15 +35,21 @@ class VartaWS {
   private maxReconnectDelay = 30_000;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private connected = false;
+  private stopped = true;
+  private connecting = false;
 
   connect() {
+    this.stopped = false;
+    if (this.connecting) return;
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
-    firebaseAuth.currentUser
-      ?.getIdToken()
+    this.connecting = true;
+    Promise.resolve(firebaseAuth.currentUser?.getIdToken())
       .then((token) => {
+        this.connecting = false;
+        if (this.stopped) return;
         const url = token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL;
         this.ws = new WebSocket(url);
         this.ws.onopen = this.onOpen.bind(this);
@@ -52,12 +58,8 @@ class VartaWS {
         this.ws.onmessage = this.onMessage.bind(this);
       })
       .catch(() => {
-        const url = WS_URL;
-        this.ws = new WebSocket(url);
-        this.ws.onopen = this.onOpen.bind(this);
-        this.ws.onclose = this.onClose.bind(this);
-        this.ws.onerror = this.onError.bind(this);
-        this.ws.onmessage = this.onMessage.bind(this);
+        this.connecting = false;
+        if (!this.stopped) this.scheduleReconnect();
       });
   }
 
@@ -69,6 +71,8 @@ class VartaWS {
     for (const sub of this.subs) {
       this.sendSubscribe(sub.channel);
     }
+    this.dispatch("connection", "connected", null);
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     // Heartbeat ping every 25s
     this.heartbeatTimer = setInterval(() => {
       this.send({ type: "ping" });
@@ -79,7 +83,7 @@ class VartaWS {
     console.log("[VartaWS] Disconnected, reconnecting...");
     this.connected = false;
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-    this.scheduleReconnect();
+    if (!this.stopped) this.scheduleReconnect();
   }
 
   private onError(err: Event) {
@@ -123,7 +127,7 @@ class VartaWS {
     }, delay);
   }
 
-  private send(msg: unknown) {
+  send(msg: unknown) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
@@ -166,8 +170,11 @@ class VartaWS {
   }
 
   disconnect() {
+    this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.reconnectTimer = null;
+    if (this.ws) this.ws.onclose = null;
     this.ws?.close();
     this.ws = null;
     this.connected = false;
