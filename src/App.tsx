@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CallingProvider } from "./contexts/CallingContext";
 import { GlobalCallOverlay } from "./components/calls/CallUI";
@@ -24,6 +24,7 @@ import { SetPasswordPromptModal } from "./components/auth/SetPasswordPromptModal
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
   const { user, profile, loading, refreshProfile, signOut } = useAuth();
   const [profileTimeout, setProfileTimeout] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     if (user && !profile) {
@@ -70,16 +71,16 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (requireAdmin && !profile?.is_admin) return <Navigate to="/" replace />;
   
   const isApprovedOrAdmin = profile?.is_approved || profile?.is_admin;
 
-  if (!isApprovedOrAdmin && window.location.pathname !== '/pending') {
+  if (!isApprovedOrAdmin && location.pathname !== '/pending') {
     return <Navigate to="/pending" replace />;
   }
 
-  if (isApprovedOrAdmin && window.location.pathname === '/pending') {
+  if (isApprovedOrAdmin && location.pathname === '/pending') {
     return <Navigate to="/" replace />;
   }
 

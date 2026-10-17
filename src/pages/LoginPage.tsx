@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { vartaWS } from "../lib/ws";
 import { generateQRCodeSVG } from "../lib/qrcode";
-import { signInWithGoogleRedirect, signInWithGooglePopup, handleFirebaseGoogleRedirect } from "../lib/firebase";
 import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { profilesApi } from "../lib/api";
 
 export function LoginPage() {
-  const { user, signIn, signUp, resetPassword } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
   const [pairingToken, setPairingToken] = useState("");
   const [qrStatusText, setQrStatusText] = useState("Waiting for QR scan...");
@@ -18,9 +18,11 @@ export function LoginPage() {
   // Automatically redirect if already logged in
   useEffect(() => {
     if (user) {
-      navigate("/", { replace: true });
+      const targetPath = (location.state as any)?.from?.pathname;
+      const destination = targetPath && targetPath !== "/login" ? targetPath : "/";
+      navigate(destination, { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, location]);
 
   useEffect(() => {
     if (activeTab === "qr" && !pairingToken) {
@@ -129,41 +131,23 @@ export function LoginPage() {
     return Math.min(strength, 3);
   };
 
-  useEffect(() => {
-    handleFirebaseGoogleRedirect()
-      .then((res) => {
-        if (res?.user) {
-          navigate("/", { replace: true });
-        }
-      })
-      .catch((err) => {
-        console.warn("Firebase Google redirect result:", err);
-      });
-  }, [navigate]);
-
   const handleOAuthSignIn = async (provider: "google") => {
     setError({});
     setLoading(true);
     try {
       if (provider === "google") {
-        try {
-          const res = await signInWithGooglePopup();
-          if (res?.user) {
-            navigate("/", { replace: true });
-            return;
-          }
-        } catch (popupErr: any) {
-          if (popupErr?.code === "auth/popup-closed-by-user") {
-            setLoading(false);
-            return;
-          }
-          console.warn("Popup sign-in failed, attempting redirect:", popupErr);
-          await signInWithGoogleRedirect();
-          return;
+        const authedUser = await signInWithGoogle();
+        if (authedUser) {
+          const targetPath = (location.state as any)?.from?.pathname;
+          const destination = targetPath && targetPath !== "/login" ? targetPath : "/";
+          navigate(destination, { replace: true });
         }
       }
     } catch (e: any) {
-      setError({ form: `Failed to connect to ${provider}: ${e.message}` });
+      if (e?.code === "auth/popup-closed-by-user" || e?.code === "auth/cancelled-popup-request") {
+        return;
+      }
+      setError({ form: `Failed to connect to ${provider}: ${e?.message || e}` });
     } finally {
       setLoading(false);
     }
@@ -196,7 +180,9 @@ export function LoginPage() {
       } else {
         await signIn(email, password);
       }
-      navigate("/", { replace: true });
+      const targetPath = (location.state as any)?.from?.pathname;
+      const destination = targetPath && targetPath !== "/login" ? targetPath : "/";
+      navigate(destination, { replace: true });
     } catch (err: any) {
       const msg = err.message || "Authentication failed";
       if (msg.includes("auth/operation-not-allowed") || msg.includes("operation-not-allowed")) {
@@ -218,6 +204,17 @@ export function LoginPage() {
       setLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0b141a]">
+        <div className="flex flex-col items-center gap-4 text-zinc-400">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1E88C7] border-t-transparent" />
+          <span className="text-sm">Connecting to Varta...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[#0b141a] text-white">

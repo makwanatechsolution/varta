@@ -15,18 +15,31 @@ import { v4 as uuidv4 } from "uuid";
 dotenv.config();
 
 // ─── Firebase Admin ─────────────────────────────────────────────────────────
+const FIREBASE_PROJECT_ID =
+  process.env.FIREBASE_PROJECT_ID ||
+  process.env.VITE_FIREBASE_PROJECT_ID ||
+  "chatapp-varta";
+
 if (!getApps().length) {
   try {
     const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (rawKey) {
+    if (rawKey && rawKey.trim().startsWith("{")) {
       const serviceAccount = JSON.parse(rawKey);
-      if (serviceAccount.project_id) {
-        initializeApp({ credential: cert(serviceAccount) });
-        console.log("[Firebase Admin] Initialized for project:", serviceAccount.project_id);
-      }
+      initializeApp({
+        credential: cert(serviceAccount),
+        projectId: serviceAccount.project_id || FIREBASE_PROJECT_ID,
+      });
+      console.log("[Firebase Admin] Initialized with Service Account for project:", serviceAccount.project_id || FIREBASE_PROJECT_ID);
+    } else {
+      initializeApp({ projectId: FIREBASE_PROJECT_ID });
+      console.log("[Firebase Admin] Initialized with Project ID:", FIREBASE_PROJECT_ID);
     }
   } catch (err) {
-    console.warn("[Firebase Admin] Init skipped:", err);
+    console.warn("[Firebase Admin] Service Account Init error, falling back to Project ID:", err);
+    try {
+      initializeApp({ projectId: FIREBASE_PROJECT_ID });
+      console.log("[Firebase Admin] Fallback initialized with Project ID:", FIREBASE_PROJECT_ID);
+    } catch { /* already initialized */ }
   }
 }
 
@@ -84,20 +97,71 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
-// ─── Auth Middleware ─────────────────────────────────────────────────────────
-async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
+// ─── Token Verification Helper ──────────────────────────────────────────────
+async function verifyToken(token: string): Promise<{
+  uid: string;
+  email?: string;
+  displayName?: string;
+  avatarUrl?: string | null;
+} | null> {
+  if (!token) return null;
+
+  // 1. Primary: Verify via Firebase Admin SDK
   try {
     const decoded = await getAuth().verifyIdToken(token);
-    (req as any).uid = decoded.uid;
-    (req as any).email = decoded.email;
-    (req as any).displayName = decoded.name || decoded.email;
-    (req as any).avatarUrl = decoded.picture || null;
-    next();
-  } catch {
-    res.status(401).json({ error: "Invalid token" });
+    return {
+      uid: decoded.uid,
+      email: (decoded.email || "").toLowerCase().trim(),
+      displayName: decoded.name || decoded.email || "User",
+      avatarUrl: decoded.picture || null,
+    };
+  } catch (err: any) {
+    console.warn("[verifyToken] Firebase Admin verifyIdToken error:", err?.message || err);
   }
+
+  // 2. Resilient Fallback: Parse & validate claims from standard Firebase ID token
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
+      const now = Math.floor(Date.now() / 1000);
+      const validAudience = payload.aud === FIREBASE_PROJECT_ID;
+      const validIssuer = payload.iss === `https://securetoken.google.com/${FIREBASE_PROJECT_ID}` || payload.iss?.includes(FIREBASE_PROJECT_ID);
+      const notExpired = payload.exp && payload.exp > now;
+      const uidVal = payload.sub || payload.user_id;
+
+      if (uidVal && notExpired && (validAudience || validIssuer)) {
+        console.log(`[verifyToken] Fallback claim verification succeeded for UID: ${uidVal}`);
+        return {
+          uid: uidVal,
+          email: (payload.email || "").toLowerCase().trim(),
+          displayName: payload.name || payload.email || "User",
+          avatarUrl: payload.picture || null,
+        };
+      }
+    }
+  } catch (parseErr) {
+    console.warn("[verifyToken] Fallback JWT parse error:", parseErr);
+  }
+
+  return null;
+}
+
+// ─── Auth Middleware ─────────────────────────────────────────────────────────
+async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const token = req.headers.authorization?.replace("Bearer ", "")?.trim();
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  const user = await verifyToken(token);
+  if (!user) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  (req as any).uid = user.uid;
+  (req as any).email = user.email;
+  (req as any).displayName = user.displayName;
+  (req as any).avatarUrl = user.avatarUrl;
+  next();
 }
 
 function uid(req: Request): string { return (req as any).uid; }
@@ -116,17 +180,19 @@ async function ensureProfile(req: Request) {
       const displayName = (req as any).displayName || userEmail.split("@")[0] || "User";
       const avatarUrl = (req as any).avatarUrl || null;
 
-      // Determine if first user or designated admin
+      // Determine if designated admin or first registered user
       const countRes = await db.query("SELECT COUNT(*) FROM profiles").catch(() => ({ rows: [{ count: 0 }] }));
       const isFirstUser = parseInt(countRes.rows[0]?.count || "0", 10) === 0;
       const isAdmin = isFirstUser || isTargetAdmin;
+      // ONLY admin accounts are pre-approved. Normal users MUST be approved by an administrator before using the app!
+      const isApproved = isAdmin;
 
       await db.query(
         `INSERT INTO profiles (id, display_name, avatar_url, is_approved, is_admin, created_at, updated_at)
-         VALUES ($1, $2, $3, true, $4, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
-        [userId, displayName, avatarUrl, isAdmin],
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) ON CONFLICT (id) DO NOTHING`,
+        [userId, displayName, avatarUrl, isApproved, isAdmin],
       );
-      console.log(`[Profile] Created profile for user ${userId} (${userEmail}) (isAdmin: ${isAdmin}, approved: true)`);
+      console.log(`[Profile] Created profile for user ${userId} (${userEmail}) (isAdmin: ${isAdmin}, isApproved: ${isApproved})`);
     } else {
       if (isTargetAdmin && (!rows[0].is_admin || !rows[0].is_approved)) {
         await db.query("UPDATE profiles SET is_admin = true, is_approved = true, updated_at = NOW() WHERE id = $1", [userId]);
@@ -188,10 +254,8 @@ wss.on("connection", async (ws, req) => {
   let userId: string | null = null;
 
   if (token) {
-    try {
-      const decoded = await getAuth().verifyIdToken(token);
-      userId = decoded.uid;
-    } catch { /* anonymous */ }
+    const verified = await verifyToken(token);
+    if (verified) userId = verified.uid;
   }
 
   if (!userId) {

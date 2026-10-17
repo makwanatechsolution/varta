@@ -7,7 +7,13 @@ import {
   sendPasswordResetEmail,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { firebaseAuth, firebaseSignOut } from "../lib/firebase";
+import {
+  firebaseAuth,
+  firebaseSignOut,
+  signInWithGooglePopup,
+  signInWithGoogleRedirect,
+  handleFirebaseGoogleRedirect,
+} from "../lib/firebase";
 import { profilesApi } from "../lib/api";
 import type { Profile } from "../types/database";
 
@@ -23,6 +29,7 @@ interface AuthContextValue {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  signInWithGoogle: () => Promise<AuthUser | null>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -37,6 +44,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const buildProfileFromUser = (u: FirebaseUser): Profile => {
+    const emailLower = (u.email || "").toLowerCase().trim();
+    const isAdmin = ADMIN_EMAILS.includes(emailLower);
+    return {
+      id: u.uid,
+      username: u.email?.split("@")[0] || "user",
+      display_name: u.displayName || u.email?.split("@")[0] || "User",
+      avatar_url: u.photoURL || null,
+      bio: "",
+      phone: null,
+      last_seen: new Date().toISOString(),
+      presence: "online",
+      custom_status: null,
+      custom_status_expires_at: null,
+      status_privacy: "everyone",
+      is_approved: isAdmin, // Only designated admins are pre-approved. Regular signups must be approved by admin!
+      is_admin: isAdmin,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as Profile;
+  };
+
   const fetchProfile = async (retry = 0) => {
     try {
       const { data, error } = await profilesApi.getMe();
@@ -46,89 +75,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data) {
         setProfile({
           ...data,
-          is_admin: isTargetAdmin ? true : (data as Profile).is_admin,
-          is_approved: isTargetAdmin ? true : (data as Profile).is_approved,
+          is_admin: isTargetAdmin ? true : Boolean((data as Profile).is_admin),
+          is_approved: isTargetAdmin ? true : Boolean((data as Profile).is_approved),
         } as Profile);
       } else {
         console.warn("[Auth] fetchProfile warning:", error);
-        if (isTargetAdmin && firebaseAuth.currentUser) {
-          const u = firebaseAuth.currentUser;
-          setProfile({
-            id: u.uid,
-            username: u.email?.split("@")[0] || "admin",
-            display_name: u.displayName || "Admin",
-            avatar_url: u.photoURL || null,
-            bio: "Varta Platform Administrator",
-            phone: null,
-            last_seen: new Date().toISOString(),
-            presence: "online",
-            custom_status: null,
-            custom_status_expires_at: null,
-            status_privacy: "everyone",
-            is_approved: true,
-            is_admin: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          } as Profile);
+        if (firebaseAuth.currentUser) {
+          setProfile((prev) => prev ?? buildProfileFromUser(firebaseAuth.currentUser!));
         }
         if (retry < 2) setTimeout(() => fetchProfile(retry + 1), 2000);
       }
     } catch (err) {
       console.warn("[Auth] fetchProfile failed:", err);
-      const currentUserEmail = (firebaseAuth.currentUser?.email || "").toLowerCase().trim();
-      if (ADMIN_EMAILS.includes(currentUserEmail) && firebaseAuth.currentUser) {
-        const u = firebaseAuth.currentUser;
-        setProfile({
-          id: u.uid,
-          username: u.email?.split("@")[0] || "admin",
-          display_name: u.displayName || "Admin",
-          avatar_url: u.photoURL || null,
-          bio: "Varta Platform Administrator",
-          phone: null,
-          last_seen: new Date().toISOString(),
-          presence: "online",
-          custom_status: null,
-          custom_status_expires_at: null,
-          status_privacy: "everyone",
-          is_approved: true,
-          is_admin: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        } as Profile);
+      if (firebaseAuth.currentUser) {
+        setProfile((prev) => prev ?? buildProfileFromUser(firebaseAuth.currentUser!));
       }
       if (retry < 2) setTimeout(() => fetchProfile(retry + 1), 2000);
     }
   };
 
   useEffect(() => {
+    // 1. Check if user just returned from a Google OAuth redirect
+    handleFirebaseGoogleRedirect()
+      .then((res) => {
+        if (res?.user) {
+          const u = res.user;
+          Object.defineProperty(u, "id", { get: () => u.uid, configurable: true });
+          const authUser = u as AuthUser;
+          setUser(authUser);
+          setProfile((prev) => prev ?? buildProfileFromUser(authUser));
+          setLoading(false);
+          fetchProfile();
+        }
+      })
+      .catch((err) => {
+        console.warn("[Auth] Firebase Google redirect error:", err);
+      });
+
+    // 2. Main Firebase auth state subscription
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
       if (firebaseUser) {
         Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
-        setUser(firebaseUser as AuthUser);
-
-        // Immediately set an active profile so dashboard opens without waiting for cold-start server
-        const emailLower = (firebaseUser.email || "").toLowerCase().trim();
-        const isAdmin = ADMIN_EMAILS.includes(emailLower);
-        setProfile({
-          id: firebaseUser.uid,
-          username: firebaseUser.email?.split("@")[0] || "user",
-          display_name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "User",
-          avatar_url: firebaseUser.photoURL || null,
-          bio: "",
-          phone: null,
-          last_seen: new Date().toISOString(),
-          presence: "online",
-          custom_status: null,
-          custom_status_expires_at: null,
-          status_privacy: "everyone",
-          is_approved: true,
-          is_admin: isAdmin,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        } as Profile);
-
+        const authUser = firebaseUser as AuthUser;
+        setUser(authUser);
+        setProfile((prev) => prev ?? buildProfileFromUser(authUser));
         setLoading(false);
-        // Sync database profile in background
         fetchProfile();
       } else {
         setUser(null);
@@ -140,24 +131,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(firebaseAuth, email, password);
-    // onAuthStateChanged will trigger fetchProfile
+    setLoading(true);
+    try {
+      const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      if (cred.user) {
+        Object.defineProperty(cred.user, "id", { get: () => cred.user.uid, configurable: true });
+        const authUser = cred.user as AuthUser;
+        setUser(authUser);
+        setProfile(buildProfileFromUser(authUser));
+        setLoading(false);
+        fetchProfile();
+      }
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
+  };
+
+  const signInWithGoogle = async (): Promise<AuthUser | null> => {
+    setLoading(true);
+    try {
+      let firebaseUser: FirebaseUser | null = null;
+      try {
+        const res = await signInWithGooglePopup();
+        firebaseUser = res.user;
+      } catch (popupErr: any) {
+        if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
+          setLoading(false);
+          throw popupErr;
+        }
+        console.warn("[Auth] Popup sign-in failed, falling back to redirect:", popupErr);
+        await signInWithGoogleRedirect();
+        return null;
+      }
+
+      if (firebaseUser) {
+        Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser!.uid, configurable: true });
+        const authUser = firebaseUser as AuthUser;
+        setUser(authUser);
+        setProfile(buildProfileFromUser(authUser));
+        setLoading(false);
+        fetchProfile();
+        return authUser;
+      }
+      return null;
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
-    const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-    // Set display name in Firebase
-    await updateProfile(cred.user, { displayName });
-    // Backend will auto-create profile on first /api/profiles/me call
-    // Notify admin of new signup
+    setLoading(true);
     try {
-      await fetch("/api/notifyAdminSignup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userName: displayName }),
-      });
+      const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+      await updateProfile(cred.user, { displayName });
+      if (cred.user) {
+        Object.defineProperty(cred.user, "id", { get: () => cred.user.uid, configurable: true });
+        const authUser = cred.user as AuthUser;
+        setUser(authUser);
+        setProfile(buildProfileFromUser(authUser));
+        setLoading(false);
+        fetchProfile();
+      }
+      try {
+        await fetch("/api/notifyAdminSignup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userName: displayName }),
+        });
+      } catch (err) {
+        console.warn("Failed to send admin notification:", err);
+      }
     } catch (err) {
-      console.warn("Failed to send admin notification:", err);
+      setLoading(false);
+      throw err;
     }
   };
 
@@ -180,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signIn,
         signUp,
+        signInWithGoogle,
         signOut,
         refreshProfile: fetchProfile,
         resetPassword,
