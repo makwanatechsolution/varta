@@ -250,3 +250,12 @@ Deploy both the frontend and backend. In **Settings > Notifications & Sound**, c
 Use HTTPS for deployed web push. For iPhone/iPad, add Varta to the Home Screen and launch it there before enabling notifications. The included manifest supports standalone launch. See [Firebase web message delivery](https://firebase.google.com/docs/cloud-messaging/web/receive-messages) and [FCM delivery errors](https://firebase.google.com/docs/cloud-messaging/error-codes).
 
 Run the regression checks with `node --test tests/*.test.mjs`.
+
+### Render environment checks
+
+- `APP_URL=https://chat.makwanatechsolution.in` (a real frontend origin; `*` is only a CORS wildcard, not an application URL).
+- `FIREBASE_PROJECT_ID=chatapp-varta`.
+- `FIREBASE_SERVICE_ACCOUNT_KEY`: the complete JSON from Firebase Project settings > Service accounts > Generate new private key. Store it only as a backend secret, never under a `VITE_` name. Alternatively mount a credential file and point `GOOGLE_APPLICATION_CREDENTIALS` to it.
+- In `DATABASE_URL`, `sslmode=verify-full` explicitly preserves the current pg behavior. Use `uselibpqcompat=true&sslmode=require` only when you intentionally need libpq's require semantics. The backend and database-init command now normalize legacy ambiguous SSL aliases consistently.
+
+`MetadataLookupWarning` on Render is consistent with Google's SDK looking for default credentials on a metadata server. Project-ID-only initialization can verify Firebase ID tokens but does not supply credentials for sending push. The backend now reports missing Render push credentials directly instead of attempting that metadata lookup during delivery.
