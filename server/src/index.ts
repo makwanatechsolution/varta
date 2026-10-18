@@ -359,7 +359,7 @@ app.get("/api/profiles/:id", requireAuth, async (req, res) => {
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
 
-const PUBLIC_API_URL = (process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || "https://api.chat.makwanatechsolution.in").replace(/\/$/, "");
+const PUBLIC_API_URL = (process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || (process.env.NODE_ENV === "production" ? "https://api.chat.makwanatechsolution.in" : `http://localhost:${PORT}`)).replace(/\/$/, "");
 
 app.post("/api/upload/avatar", requireAuth, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
