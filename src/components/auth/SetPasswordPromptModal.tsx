@@ -5,7 +5,7 @@ import { updatePassword, EmailAuthProvider, linkWithCredential } from "firebase/
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, X } from "lucide-react";
 
 export function SetPasswordPromptModal() {
-  const { user } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -15,7 +15,7 @@ export function SetPasswordPromptModal() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !profile || authLoading) return;
 
     // Check if user has password provider linked
     const hasPassword = user.providerData.some((p) => p.providerId === "password");
@@ -28,9 +28,9 @@ export function SetPasswordPromptModal() {
       const timer = setTimeout(() => setIsOpen(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, [user]);
+  }, [user, profile, authLoading]);
 
-  if (!isOpen || !user) return null;
+  if (!isOpen || !user || !profile || authLoading) return null;
 
   const handleClose = () => {
     sessionStorage.setItem(`dismiss_pwd_prompt_${user.uid}`, "true");

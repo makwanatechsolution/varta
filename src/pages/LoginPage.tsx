@@ -7,7 +7,7 @@ import { Moon, Sun, Eye, EyeOff, CheckCircle2, XCircle, AlertCircle } from "luci
 import { profilesApi } from "../lib/api";
 
 export function LoginPage() {
-  const { user, loading: authLoading, signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
+  const { user, loading: authLoading, error: authError, signIn, signUp, signInWithGoogle, resetPassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<"login" | "signup" | "qr">("login");
@@ -17,12 +17,12 @@ export function LoginPage() {
 
   // Automatically redirect if already logged in
   useEffect(() => {
-    if (user) {
+    if (user && !authLoading) {
       const targetPath = (location.state as any)?.from?.pathname;
       const destination = targetPath && targetPath !== "/login" ? targetPath : "/";
       navigate(destination, { replace: true });
     }
-  }, [user, navigate, location]);
+  }, [user, authLoading, navigate, location]);
 
   useEffect(() => {
     if (activeTab === "qr" && !pairingToken) {
@@ -136,18 +136,20 @@ export function LoginPage() {
     setLoading(true);
     try {
       if (provider === "google") {
-        const authedUser = await signInWithGoogle();
-        if (authedUser) {
-          const targetPath = (location.state as any)?.from?.pathname;
-          const destination = targetPath && targetPath !== "/login" ? targetPath : "/";
-          navigate(destination, { replace: true });
-        }
+        await signInWithGoogle();
       }
     } catch (e: any) {
-      if (e?.code === "auth/popup-closed-by-user" || e?.code === "auth/cancelled-popup-request") {
-        return;
-      }
-      setError({ form: `Failed to connect to ${provider}: ${e?.message || e}` });
+      const messages: Record<string, string> = {
+        "auth/popup-blocked": "Your browser blocked Google sign-in. Allow popups for this website, then try again.",
+        "auth/popup-closed-by-user": "Google sign-in closed before it finished. Please try again and keep the Google window open.",
+        "auth/cancelled-popup-request": "Another sign-in was started. Please try again once.",
+        "auth/unauthorized-domain": "This website domain is not enabled for Google login. Add it under Firebase Authentication > Settings > Authorized domains.",
+        "auth/operation-not-allowed": "Google sign-in is not enabled in Firebase Authentication.",
+        "auth/web-storage-unsupported": "Your browser is blocking sign-in storage. Allow site storage or try a regular browser window.",
+        "auth/network-request-failed": "Google could not connect. Check your connection and try again.",
+        "auth/account-exists-with-different-credential": "This email already uses another sign-in method. Sign in with that method first.",
+      };
+      setError({ form: messages[e?.code] || `Google sign-in failed: ${e?.message || e}` });
     } finally {
       setLoading(false);
     }
@@ -291,10 +293,10 @@ export function LoginPage() {
             </button>
           </div>
 
-          {error.form && (
+          {(error.form || authError) && (
             <div className="rounded-2xl bg-red-500/10 border border-red-500/30 p-4 flex items-center gap-3 text-red-400 text-sm">
               <AlertCircle className="h-5 w-5 shrink-0" />
-              <span>{error.form}</span>
+              <span>{error.form || authError}</span>
             </div>
           )}
 
@@ -436,6 +438,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleOAuthSignIn("google")}
+                disabled={loading || authLoading}
                 className="flex items-center justify-center gap-3 rounded-2xl glass-input py-3 text-xs font-semibold text-white hover:bg-white/10 transition-colors"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">

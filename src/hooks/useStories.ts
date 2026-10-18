@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { vartaWS } from "../lib/ws";
 import { statusesApi } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
@@ -9,12 +9,16 @@ export function useStories() {
   const [stories, setStories] = useState<StatusStory[]>([]);
   const [myStories, setMyStories] = useState<StatusStory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
-
-    const { data: allStories } = await statusesApi.list();
+    const currentRequest = ++requestId.current;
+    setError(null);
+    const { data: allStories, error: loadError } = await statusesApi.list();
+    if (currentRequest !== requestId.current) return;
+    if (loadError) { setError(loadError); setLoading(false); return; }
 
     const enriched = (allStories ?? []).map((s: any) => ({
       ...(s as object),
@@ -27,12 +31,14 @@ export function useStories() {
   }, [user]);
 
   useEffect(() => {
+    setLoading(true);
     load();
+    const timer = setInterval(load, 60000);
     const offStatus = vartaWS.on("statuses", "updated", load);
     const offConnect = vartaWS.on("connection", "connected", load);
     const refresh = () => { if (!document.hidden) load(); };
     document.addEventListener("visibilitychange", refresh);
-    return () => { offStatus(); offConnect(); document.removeEventListener("visibilitychange", refresh); };
+    return () => { ++requestId.current; clearInterval(timer); offStatus(); offConnect(); document.removeEventListener("visibilitychange", refresh); };
   }, [load]);
 
   const postStory = async (opts: {
@@ -52,16 +58,24 @@ export function useStories() {
 
   const markViewed = async (statusId: string, reactionEmoji?: string) => {
     if (!user) return;
-    await statusesApi.markViewed(statusId, reactionEmoji);
-    await load();
+    if (myStories.some(story => story.id === statusId)) return;
+    const { error } = await statusesApi.markViewed(statusId, reactionEmoji);
+    if (!error) setStories(previous => previous.map(story => story.id === statusId ? { ...story, viewed: true } : story));
   };
 
   const getViewers = async (statusId: string) => {
-    const { data } = await import("../lib/api").then((m) =>
+    const { data, error } = await import("../lib/api").then((m) =>
       m.api.get<any[]>(`/api/statuses/${statusId}/views`),
     );
+    if (error) throw new Error(error);
     return data ?? [];
   };
 
-  return { stories, myStories, loading, postStory, markViewed, getViewers, reload: load };
+  const deleteStory = async (id: string) => {
+    const { error } = await statusesApi.delete(id);
+    if (error) throw new Error(error);
+    await load();
+  };
+
+  return { stories, myStories, loading, error, deleteStory, postStory, markViewed, getViewers, reload: load };
 }

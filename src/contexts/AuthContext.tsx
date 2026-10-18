@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -10,10 +10,11 @@ import {
 import {
   firebaseAuth,
   firebaseSignOut,
+  removePushRegistration,
   signInWithGooglePopup,
-  signInWithGoogleRedirect,
   handleFirebaseGoogleRedirect,
 } from "../lib/firebase";
+import { createAuthSession } from "../lib/authSession";
 import { profilesApi } from "../lib/api";
 import type { Profile } from "../types/database";
 
@@ -27,6 +28,7 @@ interface AuthContextValue {
   /** Backend profile record */
   profile: Profile | null;
   loading: boolean;
+  error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signInWithGoogle: () => Promise<AuthUser | null>;
@@ -41,79 +43,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const session = useRef<ReturnType<typeof createAuthSession<AuthUser, Profile>> | null>(null);
+
+  const toAuthUser = (firebaseUser: FirebaseUser): AuthUser => {
+    Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
+    return firebaseUser as AuthUser;
+  };
 
   const fetchProfile = async () => {
     const currentUser = firebaseAuth.currentUser;
-    if (!currentUser) return;
-    const { data, error } = await profilesApi.getMe();
-    if (firebaseAuth.currentUser !== currentUser) return;
-    if (data) setProfile(data as Profile);
-    else console.warn("[Auth] Profile unavailable:", error);
+    if (currentUser) await session.current?.restore(toAuthUser(currentUser), true);
   };
 
   useEffect(() => {
     let active = true;
-    handleFirebaseGoogleRedirect().catch(console.warn);
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
-      setProfile(null);
-      if (!firebaseUser) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-      Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
-      setUser(firebaseUser as AuthUser);
-      setLoading(true);
-      try {
+    const controller = createAuthSession<AuthUser, Profile>({
+      currentUser: () => firebaseAuth.currentUser,
+      loadProfile: async () => {
         const { data, error } = await profilesApi.getMe();
-        if (active && firebaseAuth.currentUser === firebaseUser) {
-          if (data) setProfile(data as Profile);
-          else console.warn("[Auth] Profile unavailable:", error);
-        }
-      } finally {
-        if (active && firebaseAuth.currentUser === firebaseUser) setLoading(false);
-      }
+        if (error) throw new Error(error);
+        if (!data?.id) throw new Error("Your account profile was not returned by the server. Please retry.");
+        if (data.id !== firebaseAuth.currentUser?.uid) throw new Error("The server returned a different account profile. Please retry.");
+        return data as Profile;
+      },
+      publish: state => {
+        setUser(state.user); setProfile(state.profile); setLoading(state.loading); setError(state.error);
+      },
     });
-    return () => { active = false; unsubscribe(); };
+    session.current = controller;
+    // Both sources use one coordinator; neither can overwrite a newer account.
+    const unsubscribe = onAuthStateChanged(firebaseAuth, firebaseUser => {
+      controller.restore(firebaseUser ? toAuthUser(firebaseUser) : null);
+    }, authError => {
+      if (active) { setError(authError.message); setLoading(false); }
+    });
+    handleFirebaseGoogleRedirect().then(result => {
+      if (active && result?.user && firebaseAuth.currentUser?.uid === result.user.uid) controller.restore(toAuthUser(result.user));
+    }).catch(redirectError => {
+      if (active && !firebaseAuth.currentUser) { setError(redirectError.message || "Google sign-in did not complete. Please try again."); setLoading(false); }
+    });
+    return () => { active = false; controller.dispose(); unsubscribe(); };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      await signInWithEmailAndPassword(firebaseAuth, email, password);
-    } catch (err) {
-      setLoading(false);
-      throw err;
-    }
+    setError(null);
+    const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
+    await session.current?.restore(toAuthUser(credential.user));
   };
 
   const signInWithGoogle = async (): Promise<AuthUser | null> => {
-    setLoading(true);
-    try {
-      let firebaseUser: FirebaseUser | null = null;
-      try {
-        const res = await signInWithGooglePopup();
-        firebaseUser = res.user;
-      } catch (popupErr: any) {
-        if (popupErr?.code === "auth/popup-closed-by-user" || popupErr?.code === "auth/cancelled-popup-request") {
-          setLoading(false);
-          throw popupErr;
-        }
-        console.warn("[Auth] Popup sign-in failed, falling back to redirect:", popupErr);
-        await signInWithGoogleRedirect();
-        return null;
-      }
-
-      if (firebaseUser) {
-        Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser!.uid, configurable: true });
-        const authUser = firebaseUser as AuthUser;
-        return authUser;
-      }
-      return null;
-    } catch (err) {
-      setLoading(false);
-      throw err;
-    }
+    setError(null);
+    // Keep the popup tied to the click. Redirect fallback can lose the session
+    // when the auth domain's storage is blocked by the browser.
+    const result = await signInWithGooglePopup();
+    const authUser = toAuthUser(result.user);
+    await session.current?.restore(authUser);
+    return authUser;
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
@@ -121,7 +107,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       await updateProfile(cred.user, { displayName });
-      await profilesApi.update({ display_name: displayName });
+      const { error } = await profilesApi.update({ display_name: displayName });
+      if (error) throw new Error(error);
+      await fetchProfile();
     } catch (err) {
       setLoading(false);
       throw err;
@@ -129,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    await removePushRegistration().catch(console.warn);
     try {
       await profilesApi.updatePresence("offline");
     } catch { /* best effort */ }
@@ -145,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         loading,
+        error,
         signIn,
         signUp,
         signInWithGoogle,

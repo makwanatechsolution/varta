@@ -17,58 +17,34 @@ import { StarredPage } from "./pages/StarredPage";
 import { AwaitingApprovalPage } from "./pages/AwaitingApprovalPage";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 import { usePresence } from "./hooks/usePresence";
-import { useEffect, useState } from "react";
-import { requestPushPermission } from "./lib/firebase";
+import { NotificationCenter } from "./components/ui/NotificationCenter";
 import { SetPasswordPromptModal } from "./components/auth/SetPasswordPromptModal";
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
-  const { user, profile, loading, refreshProfile, signOut } = useAuth();
-  const [profileTimeout, setProfileTimeout] = useState(false);
+  const { user, profile, loading, error, refreshProfile, signOut } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    if (user && !profile) {
-      const timer = setTimeout(() => setProfileTimeout(true), 8000);
-      return () => clearTimeout(timer);
-    } else {
-      setProfileTimeout(false);
-    }
-  }, [user, profile]);
-
-  if (loading || (!profile && user && !profileTimeout)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "var(--bg-main)" }}>
-        <div className="flex flex-col items-center gap-4" style={{ color: "var(--text-muted)" }}>
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--color-primary)", borderTopColor: "transparent" }} />
-          <span className="text-sm">Connecting to Varta...</span>
-        </div>
+  if (loading) {
+    return <div className="flex min-h-dvh items-center justify-center bg-background text-main">
+      <div role="status" className="flex flex-col items-center gap-4 text-muted">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span className="text-sm">Connecting to Varta...</span>
       </div>
-    );
+    </div>;
   }
 
-  if (user && !profile && profileTimeout) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center" style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}>
-        <div className="max-w-md p-6 rounded-2xl bg-[#111b21] border border-zinc-800 space-y-4">
-          <p className="font-semibold text-lg text-white">Connecting to Varta Server</p>
-          <p className="text-xs text-zinc-400">Your account could not connect to the server. Check your connection and retry.</p>
-          <div className="flex gap-3 justify-center pt-2">
-            <button
-              onClick={() => { refreshProfile(); }}
-              className="px-4 py-2 rounded-xl bg-[#1E88C7] text-white text-xs font-semibold hover:bg-[#1E88C7]/80"
-            >
-              Retry Connection
-            </button>
-            <button
-              onClick={signOut}
-              className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700"
-            >
-              Sign Out
-            </button>
-          </div>
+  if (user && !profile) {
+    return <div className="flex min-h-dvh items-center justify-center bg-background p-6 text-main">
+      <section className="w-full max-w-md rounded-2xl border border-border-subtle bg-sidebar p-6 space-y-4">
+        <p className="font-semibold text-lg">Sign-in succeeded</p>
+        <p className="text-sm text-muted">Varta could not finish connecting your account. You are still signed in.</p>
+        <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-xs text-red-400 break-words">{error || "The server did not return an account profile. Please retry."}</p>
+        <div className="flex gap-3 pt-2">
+          <button onClick={() => { refreshProfile(); }} className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white">Retry connection</button>
+          <button onClick={signOut} className="rounded-xl border border-border-subtle px-4 py-2 text-sm text-muted">Sign out</button>
         </div>
-      </div>
-    );
+      </section>
+    </div>;
   }
 
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
@@ -80,12 +56,8 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
   usePresence();
 
-  useEffect(() => {
-    if (user) requestPushPermission(user.id).catch(console.warn);
-  }, [user]);
 
   return (
     <>
@@ -115,6 +87,7 @@ function AppRoutes() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <NotificationCenter />
       <GlobalCallOverlay />
       <SetPasswordPromptModal />
     </>

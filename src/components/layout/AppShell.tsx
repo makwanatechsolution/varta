@@ -63,7 +63,7 @@ export function AppShell() {
   const { user, profile, signOut } = useAuth();
   const { conversations, loading } = useConversations();
   const { typingMap, syncTypingChannels } = useGlobalTyping(user?.id);
-  const { stories, myStories, markViewed, postStory } = useStories();
+  const { stories, myStories, markViewed } = useStories();
   const [viewerStories, setViewerStories] = useState<StatusStory[] | null>(null);
   const [search, setSearch] = useState("");
   const [lastReadMap, setLastReadMap] = useState<Record<string, string>>(getLastReadMap);
@@ -104,9 +104,8 @@ export function AppShell() {
     return (c.last_message_at ?? "") > lastRead;
   }).length;
 
-  const handleAddStory = async () => {
-    const text = prompt("What's on your mind?");
-    if (text) await postStory({ media_type: "text", text_content: text, background_color: "#6366f1" });
+  const handleAddStory = () => {
+    navigate("/status?create=1");
   };
 
   // ── Nav items (desktop left-rail + mobile bottom bar) ────────────────────

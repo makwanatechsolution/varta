@@ -6,7 +6,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { Pool } from "pg";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getMessaging } from "firebase-admin/messaging";
+import { deliverPush } from "./push.js";
 import { createWriteStream, mkdirSync } from "fs";
 import { join } from "path";
 import multer from "multer";
@@ -295,33 +295,37 @@ app.get("/api/status", (_req, res) => {
 // ─── PROFILES ────────────────────────────────────────────────────────────────
 
 // GET /api/profiles/me
-app.get("/api/profiles/me", requireAuth, async (req, res) => {
-  await ensureProfile(req);
-  const { rows } = await db.query("SELECT * FROM profiles WHERE id = $1", [uid(req)]);
-  res.json(rows[0] || null);
+app.get("/api/profiles/me", requireAuth, async (req, res, next) => {
+  try {
+    await ensureProfile(req);
+    const { rows } = await db.query("SELECT * FROM profiles WHERE id = $1", [uid(req)]);
+    res.json(rows[0] || null);
+  } catch (error) { next(error); }
 });
 
 // PATCH /api/profiles/me
-app.patch("/api/profiles/me", requireAuth, async (req, res) => {
-  await ensureProfile(req);
-  const allowed = ["display_name", "username", "bio", "avatar_url", "phone", "custom_status", "custom_status_expires_at", "status_privacy"];
-  const updates: string[] = [];
-  const vals: any[] = [];
-  let i = 1;
-  for (const key of allowed) {
-    if (req.body[key] !== undefined) {
-      updates.push(`${key} = $${i++}`);
-      vals.push(req.body[key]);
+app.patch("/api/profiles/me", requireAuth, async (req, res, next) => {
+  try {
+    await ensureProfile(req);
+    const allowed = ["display_name", "username", "bio", "avatar_url", "phone", "custom_status", "custom_status_expires_at", "status_privacy"];
+    const updates: string[] = [];
+    const vals: any[] = [];
+    let i = 1;
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        updates.push(`${key} = $${i++}`);
+        vals.push(req.body[key]);
+      }
     }
-  }
-  if (!updates.length) return res.json({ ok: true });
-  updates.push(`updated_at = NOW()`);
-  vals.push(uid(req));
-  await db.query(`UPDATE profiles SET ${updates.join(", ")} WHERE id = $${i}`, vals);
-  const { rows } = await db.query("SELECT * FROM profiles WHERE id = $1", [uid(req)]);
-  // Broadcast profile update
-  broadcast(`profiles`, "updated", rows[0]);
-  res.json(rows[0]);
+    if (!updates.length) return res.json({ ok: true });
+    updates.push(`updated_at = NOW()`);
+    vals.push(uid(req));
+    await db.query(`UPDATE profiles SET ${updates.join(", ")} WHERE id = $${i}`, vals);
+    const { rows } = await db.query("SELECT * FROM profiles WHERE id = $1", [uid(req)]);
+    // Broadcast profile update
+    broadcast(`profiles`, "updated", rows[0]);
+    res.json(rows[0]);
+  } catch (error) { next(error); }
 });
 
 // PATCH /api/profiles/me/presence
@@ -545,7 +549,7 @@ app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   broadcast("conversations", "new_message", fullMsg);
 
   // Auto push notification (backend handles it directly via Firebase)
-  _triggerMessagePush(convId, myId, profRows[0]?.display_name || "Someone", type === "text" ? content : `Sent a ${type}`).catch(() => {});
+  _triggerMessagePush(convId, myId, profRows[0]?.display_name || "Someone", type === "text" ? content : `Sent a ${type}`).catch(error => console.error("[Push] Message delivery failed:", error.message));
 
   res.json(fullMsg);
 });
@@ -716,6 +720,15 @@ app.post("/api/calls", requireAuth, async (req, res) => {
     [uuidv4(), callId, myId],
   );
 
+  // Persist invitees so notification opens and reconnects can recover a ringing call.
+  for (const participantId of [...new Set<string>(participant_ids)]) {
+    if (participantId === myId) continue;
+    await db.query(
+      "INSERT INTO call_participants (id, call_id, user_id, is_muted, is_video_off) VALUES ($1,$2,$3,false,false) ON CONFLICT (call_id, user_id) DO NOTHING",
+      [uuidv4(), callId, participantId],
+    );
+  }
+
   // Get initiator profile
   const { rows: profRows } = await db.query("SELECT * FROM profiles WHERE id = $1", [myId]);
 
@@ -726,6 +739,10 @@ app.post("/api/calls", requireAuth, async (req, res) => {
     }
   }
 
+  deliverPush(db, participant_ids.filter((id: string) => id !== myId), {
+    title: `Incoming ${type === "video" ? "video" : "voice"} call`, body: `${profRows[0]?.display_name || "Someone"} is calling you`,
+    type: "incoming_call", callId, conversationId: conversation_id, callType: type, click_action: `/chat/${encodeURIComponent(conversation_id)}`,
+  }).catch(error => console.error("[Push] Call delivery failed:", error.message));
   res.json(call);
 });
 
@@ -851,57 +868,72 @@ app.delete("/api/meetings/:id", requireAuth, async (req, res) => {
 
 // ─── STATUSES / STORIES ───────────────────────────────────────────────────────
 
-app.get("/api/statuses", requireAuth, async (req, res) => {
-  const myId = uid(req);
-  const now = new Date().toISOString();
-  const { rows } = await db.query(
-    `SELECT s.*, row_to_json(p) AS profile,
-      EXISTS(SELECT 1 FROM status_views sv WHERE sv.status_id = s.id AND sv.viewer_id = $1) AS viewed
-     FROM statuses s JOIN profiles p ON p.id = s.user_id
-     WHERE s.is_deleted = false AND s.expires_at > $2
-     ORDER BY s.created_at DESC`,
-    [myId, now],
-  );
-  res.json(rows);
+app.get("/api/statuses", requireAuth, async (req, res, next) => {
+  try {
+    const myId = uid(req);
+    const now = new Date().toISOString();
+    const { rows } = await db.query(
+      `SELECT s.*, row_to_json(p) AS profile,
+        EXISTS(SELECT 1 FROM status_views sv WHERE sv.status_id = s.id AND sv.viewer_id = $1) AS viewed
+       FROM statuses s JOIN profiles p ON p.id = s.user_id
+       WHERE s.is_deleted = false AND s.expires_at > $2
+       ORDER BY s.created_at DESC`,
+      [myId, now],
+    );
+    res.json(rows);
+  } catch (error) { next(error); }
 });
 
-app.post("/api/statuses", requireAuth, async (req, res) => {
-  const { media_type, media_url, text_content, background_color, expires_at } = req.body;
-  const sId = uuidv4();
-  const { rows } = await db.query(
-    `INSERT INTO statuses (id, user_id, media_type, media_url, text_content, background_color, expires_at, is_deleted, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,false,NOW()) RETURNING *`,
-    [sId, uid(req), media_type, media_url || null, text_content || null, background_color || "#1E88C7", expires_at],
-  );
-  broadcast("statuses", "updated", { id: sId });
-  res.json(rows[0]);
+app.post("/api/statuses", requireAuth, async (req, res, next) => {
+  try {
+    const { media_type, media_url, text_content, background_color } = req.body;
+    if (!["text", "photo", "video"].includes(media_type)) return res.status(400).json({ error: "Choose a text, photo, or video status" });
+    if (media_type === "text" && (typeof text_content !== "string" || !text_content.trim() || text_content.length > 700)) return res.status(400).json({ error: "Status text must be between 1 and 700 characters" });
+    if (media_type !== "text" && (typeof media_url !== "string" || !/^https?:\/\//.test(media_url))) return res.status(400).json({ error: "Upload media before publishing" });
+    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const sId = uuidv4();
+    const { rows } = await db.query(
+      `INSERT INTO statuses (id, user_id, media_type, media_url, text_content, background_color, expires_at, is_deleted, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,false,NOW()) RETURNING *`,
+      [sId, uid(req), media_type, media_url || null, text_content || null, background_color || "#1E88C7", expires_at],
+    );
+    broadcast("statuses", "updated", { id: sId });
+    res.json(rows[0]);
+  } catch (error) { next(error); }
 });
 
-app.post("/api/statuses/:id/views", requireAuth, async (req, res) => {
-  const { reactionEmoji } = req.body;
-  await db.query(
-    `INSERT INTO status_views (status_id, viewer_id, viewed_at, reaction_emoji) VALUES ($1,$2,NOW(),$3)
-     ON CONFLICT (status_id, viewer_id) DO UPDATE SET viewed_at = NOW(), reaction_emoji = $3`,
-    [req.params.id, uid(req), reactionEmoji || null],
-  );
-  res.json({ ok: true });
+app.post("/api/statuses/:id/views", requireAuth, async (req, res, next) => {
+  try {
+    const { reactionEmoji } = req.body;
+    await db.query(
+      `INSERT INTO status_views (status_id, viewer_id, viewed_at, reaction_emoji) VALUES ($1,$2,NOW(),$3)
+       ON CONFLICT (status_id, viewer_id) DO UPDATE SET viewed_at = NOW(), reaction_emoji = $3`,
+      [req.params.id, uid(req), reactionEmoji || null],
+    );
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });
 
-app.get("/api/statuses/:id/views", requireAuth, async (req, res) => {
-  const { rows } = await db.query(
-    `SELECT sv.*, row_to_json(p) AS viewer FROM status_views sv JOIN profiles p ON p.id = sv.viewer_id WHERE sv.status_id = $1 ORDER BY sv.viewed_at ASC`,
-    [req.params.id],
-  );
-  res.json(rows);
+app.get("/api/statuses/:id/views", requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT sv.*, row_to_json(p) AS viewer FROM status_views sv JOIN profiles p ON p.id = sv.viewer_id JOIN statuses s ON s.id = sv.status_id WHERE sv.status_id = $1 AND s.user_id = $2 AND sv.viewer_id != s.user_id ORDER BY sv.viewed_at ASC`,
+      [req.params.id, uid(req)],
+    );
+    res.json(rows);
+  } catch (error) { next(error); }
 });
 
-app.delete("/api/statuses/:id", requireAuth, async (req, res) => {
-  await db.query("UPDATE statuses SET is_deleted = true WHERE id = $1 AND user_id = $2", [req.params.id, uid(req)]);
-  broadcast("statuses", "updated", { id: req.params.id });
-  res.json({ ok: true });
+app.delete("/api/statuses/:id", requireAuth, async (req, res, next) => {
+  try {
+    await db.query("UPDATE statuses SET is_deleted = true WHERE id = $1 AND user_id = $2", [req.params.id, uid(req)]);
+    broadcast("statuses", "updated", { id: req.params.id });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });
 
 // ─── CONTACTS ─────────────────────────────────────────────────────────────────
+
 
 app.get("/api/contacts", requireAuth, async (req, res) => {
   const { rows } = await db.query(
@@ -980,17 +1012,40 @@ app.delete("/api/invitations/:id", requireAuth, async (req, res) => {
 
 // ─── PUSH TOKENS ──────────────────────────────────────────────────────────────
 
-app.post("/api/push-tokens", requireAuth, async (req, res) => {
+app.post("/api/push-tokens", requireAuth, async (req, res, next) => {
   const { token, platform } = req.body;
-  await db.query(
-    `INSERT INTO push_tokens (id, user_id, token, platform, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),NOW())
-     ON CONFLICT (user_id, token) DO UPDATE SET updated_at = NOW()`,
-    [uuidv4(), uid(req), token, platform || "web"],
-  );
-  res.json({ ok: true });
+  if (typeof token !== "string" || !token.trim()) return res.status(400).json({ error: "A device token is required" });
+  const client = await db.connect().catch(next);
+  if (!client) return;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [token]);
+    await client.query("DELETE FROM push_tokens WHERE token = $1 AND user_id != $2", [token, uid(req)]);
+    await client.query(
+      `INSERT INTO push_tokens (id, user_id, token, platform, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),NOW())
+       ON CONFLICT (user_id, token) DO UPDATE SET updated_at = NOW()`,
+      [uuidv4(), uid(req), token, platform || "web"],
+    );
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(rollbackError => console.error("[Push] Token transaction rollback failed:", rollbackError.message));
+    next(error);
+  } finally { client.release(); }
 });
 
-// ─── GIF FAVORITES ────────────────────────────────────────────────────────────
+app.post("/api/push-tokens/remove", requireAuth, async (req, res, next) => {
+  try {
+    await db.query("DELETE FROM push_tokens WHERE user_id = $1 AND token = $2", [uid(req), req.body.token]);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/push-tokens/test", requireAuth, async (req, res, next) => {
+  try {
+    res.json(await deliverPush(db, [uid(req)], { title: "You're connected", body: "Message and call notifications are ready on Varta.", type: "test", click_action: "/settings" }));
+  } catch (error) { next(error); }
+});
 
 app.get("/api/gif-favorites", requireAuth, async (req, res) => {
   const { rows } = await db.query(
@@ -1062,55 +1117,7 @@ app.patch("/api/admin/settings", requireAuth, requireAdmin, async (req, res) => 
 
 // ─── NOTIFICATIONS (FCM via Firebase Admin) ───────────────────────────────────
 
-app.post("/api/sendMessagePush", async (req, res) => {
-  const { conversationId, senderId, senderName, preview, recipientIds } = req.body || {};
-  if (!conversationId || !recipientIds?.length) return res.status(400).json({ error: "Missing fields" });
-
-  try {
-    const targetIds = recipientIds.filter((id: string) => id !== senderId);
-    const { rows: tokens } = await db.query("SELECT token FROM push_tokens WHERE user_id = ANY($1)", [targetIds]);
-
-    if (!tokens.length) return res.json({ sent: 0, reason: "No tokens" });
-    if (!getApps().length) return res.status(503).json({ error: "Firebase not configured" });
-
-    const result = await getMessaging().sendEachForMulticast({
-      tokens: tokens.map((t: any) => t.token),
-      notification: { title: senderName || "New message", body: preview || "You have a new message" },
-      data: { conversationId, type: "message", click_action: "/chat", icon: "/favicon.svg" },
-      webpush: { notification: { title: senderName || "New message", body: preview || "You have a new message", icon: "/favicon.svg" }, fcmOptions: { link: "/chat" } },
-    });
-    res.json({ sent: result.successCount, failed: result.failureCount });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/sendCallPush", async (req, res) => {
-  const { callId, conversationId, initiatorId, initiatorName, callType, recipientIds } = req.body || {};
-  if (!callId || !recipientIds?.length) return res.status(400).json({ error: "Missing fields" });
-
-  try {
-    const targetIds = recipientIds.filter((id: string) => id !== initiatorId);
-    const { rows: tokens } = await db.query("SELECT token FROM push_tokens WHERE user_id = ANY($1)", [targetIds]);
-
-    if (!tokens.length) return res.json({ sent: 0, reason: "No tokens" });
-    if (!getApps().length) return res.status(503).json({ error: "Firebase not configured" });
-
-    const title = `Incoming ${callType === "video" ? "Video" : "Voice"} Call`;
-    const body = `${initiatorName || "Someone"} is calling you on Varta...`;
-
-    const result = await getMessaging().sendEachForMulticast({
-      tokens: tokens.map((t: any) => t.token),
-      notification: { title, body },
-      data: { callId, conversationId: conversationId || "", type: "incoming_call", callType: callType || "voice" },
-    });
-    res.json({ sent: result.successCount, failed: result.failureCount });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── EMAIL NOTIFICATIONS (via Resend) ────────────────────────────────────────
+// Message and call notifications are delivered by their creation routes.
 
 function escapeHtml(text: string) {
   return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
@@ -1188,14 +1195,10 @@ async function _triggerMessagePush(convId: string, senderId: string, senderName:
   );
   const recipientIds = members.map((m: any) => m.user_id);
   if (!recipientIds.length) return;
-  const { rows: tokens } = await db.query("SELECT token FROM push_tokens WHERE user_id = ANY($1)", [recipientIds]);
-  if (!tokens.length) return;
-  await getMessaging().sendEachForMulticast({
-    tokens: tokens.map((t: any) => t.token),
-    notification: { title: senderName, body: preview || "New message" },
-    data: { conversationId: convId, type: "message" },
-    webpush: { notification: { title: senderName, body: preview || "New message", icon: "/favicon.svg" }, fcmOptions: { link: "/chat" } },
-  }).catch(() => {});
+  await deliverPush(db, recipientIds, {
+    title: senderName, body: preview || "New message", conversationId: convId, type: "message",
+    click_action: `/chat/${encodeURIComponent(convId)}`,
+  });
 }
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────

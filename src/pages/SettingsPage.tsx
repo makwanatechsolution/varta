@@ -34,7 +34,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCallingContext } from "../contexts/CallingContext";
 import { useSettings, PRESET_ACCENTS } from "../contexts/SettingsContext";
 import { usePresence } from "../hooks/usePresence";
-import { profilesApi } from "../lib/api";
+import { profilesApi, pushTokensApi } from "../lib/api";
+import { requestPushPermission } from "../lib/firebase";
 import { vartaWS } from "../lib/ws";
 import { getAuth, updatePassword } from "firebase/auth";
 import { Avatar } from "../components/ui/Avatar";
@@ -751,7 +752,7 @@ function GeneralSettingsPane() {
       </div>
 
       <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>App Language</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select interface language</p>
@@ -770,7 +771,7 @@ function GeneralSettingsPane() {
           </select>
         </div>
 
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Auto-Start on Boot</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Launch Varta automatically when computer starts</p>
@@ -783,7 +784,7 @@ function GeneralSettingsPane() {
           />
         </div>
 
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Automatic Updates</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Keep Varta updated automatically in background</p>
@@ -951,7 +952,7 @@ function ChatsSettingsPane() {
       </div>
 
       <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Enter Key Sends Message</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Pressing Enter sends message; Shift+Enter creates a new line</p>
@@ -964,7 +965,7 @@ function ChatsSettingsPane() {
           />
         </div>
 
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Chat Text Font Size</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Adjust message text size inside conversation bubbles</p>
@@ -1050,7 +1051,7 @@ function CallsSettingsPane() {
       </div>
 
       <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Microphone Input Device</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select primary recording input</p>
@@ -1070,7 +1071,7 @@ function CallsSettingsPane() {
           </select>
         </div>
 
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Speaker Output Device</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Select call audio output</p>
@@ -1112,13 +1113,43 @@ function CallsSettingsPane() {
 // ─── 7. Notifications Settings Pane ──────────────────────────────────────────
 function NotificationsSettingsPane() {
   const { soundAlerts, setSoundAlerts } = useSettings();
-  const [pushNotifs, setPushNotifs] = useState(() => "Notification" in window && Notification.permission === "granted");
+  const { user } = useAuth();
+  const [pushNotifs, setPushNotifs] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState("");
+  const [pushFeedback, setPushFeedback] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    requestPushPermission(user.id, false).then(token => {
+      if (active) setPushNotifs(Boolean(token));
+    }).catch(error => { if (active) setPushError(error.message); });
+    return () => { active = false; };
+  }, [user]);
 
   const handleTogglePush = async () => {
-    if ("Notification" in window) {
-      const perm = await Notification.requestPermission();
-      setPushNotifs(perm === "granted");
-    }
+    if (!user) return;
+    setPushBusy(true); setPushError(""); setPushFeedback("");
+    try {
+      const token = await requestPushPermission(user.id);
+      setPushNotifs(Boolean(token));
+      if (token) setPushFeedback("This device is connected for message and call alerts.");
+    } catch (error) {
+      setPushNotifs(false);
+      setPushError(error instanceof Error ? error.message : "Could not enable notifications.");
+    } finally { setPushBusy(false); }
+  };
+
+  const handleTestPush = async () => {
+    setPushBusy(true); setPushError(""); setPushFeedback("");
+    try {
+      const { data, error } = await pushTokensApi.test();
+      if (error) throw new Error(error);
+      if (!data?.sent) throw new Error("No device received the test. Reconnect this device and try again.");
+      setPushFeedback("Test accepted by the notification service. Look for your Varta alert.");
+    } catch (error) { setPushError(error instanceof Error ? error.message : "Test failed."); }
+    finally { setPushBusy(false); }
   };
 
   const handleToggleSound = (enabled: boolean) => {
@@ -1134,25 +1165,32 @@ function NotificationsSettingsPane() {
       </div>
 
       <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Browser & Desktop Push Notifications</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               Permission Status: <span className={pushNotifs ? "text-emerald-500 font-bold" : "text-amber-500 font-bold"}>
-                {pushNotifs ? "Allowed" : "Not Enabled"}
+                {pushNotifs ? "Device connected" : "Device not verified"}
               </span>
             </p>
           </div>
           <button
             type="button"
             onClick={handleTogglePush}
+            disabled={pushBusy}
             className="rounded-xl border px-4 py-2 text-xs font-semibold hover:opacity-80 transition-colors"
             style={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", borderColor: "var(--border-subtle)" }}
           >
-            {pushNotifs ? "Permission Granted" : "Enable Push Notifs"}
+            {pushBusy ? "Connecting..." : pushNotifs ? "Reconnect device" : "Enable notifications"}
           </button>
         </div>
 
+        <div className="space-y-3">
+          <p className="text-xs text-muted">Receive alerts when Varta is in the background. On iPhone or iPad, add Varta to your Home Screen first.</p>
+          {pushError && <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">{pushError}</p>}
+          {pushFeedback && <p role="status" className="text-sm text-emerald-500">{pushFeedback}</p>}
+          <button disabled={!pushNotifs || pushBusy} onClick={handleTestPush} className="rounded-xl border border-border-subtle px-4 py-2 text-xs font-semibold disabled:opacity-40">Send test notification</button>
+        </div>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>Message & Call Sound Alerts</p>
@@ -1843,7 +1881,7 @@ function AccessibilitySettingsPane() {
       </div>
 
       <div className="border rounded-3xl p-6 space-y-6 shadow-xl" style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4" style={{ borderColor: "var(--border-subtle)" }}>
           <div>
             <p className="font-semibold text-sm" style={{ color: "var(--text-main)" }}>High Contrast Borders</p>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>Increase outline contrast for improved visibility</p>

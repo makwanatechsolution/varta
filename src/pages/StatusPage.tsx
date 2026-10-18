@@ -1,6 +1,7 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Plus, Eye, Camera } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Camera, Check, CircleDot, Clock3, Eye, ImagePlus, Loader2, Plus, RefreshCw, Send, Trash2, Type, X } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
 import { useStories } from "../hooks/useStories";
 import { Avatar } from "../components/ui/Avatar";
@@ -8,285 +9,148 @@ import { StoryViewer } from "../components/stories/StoryViewer";
 import { messagesApi } from "../lib/api";
 import type { StatusStory } from "../types/database";
 
-const BG_COLORS = [
-  "#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#0ea5e9",
-];
+const BG_COLORS = ["#165d74", "#344c8a", "#755196", "#af4567", "#95632e", "#2b715c", "#334155", "#111827"];
+type Viewer = { viewed_at: string; reaction_emoji: string | null; viewer: { id: string; display_name: string; avatar_url: string | null } | null };
 
 export function StatusPage() {
-  const { user } = useAuth();
-  const { myStories, stories, postStory, markViewed, getViewers } = useStories();
+  const { user, profile } = useAuth();
+  const { myStories, stories, loading, error, postStory, markViewed, getViewers, deleteStory, reload } = useStories();
   const [viewerStories, setViewerStories] = useState<StatusStory[] | null>(null);
-  const [showTextForm, setShowTextForm] = useState(false);
+  const [showComposer, setShowComposer] = useState(() => new URLSearchParams(window.location.search).get("create") === "1");
   const [textContent, setTextContent] = useState("");
   const [bgColor, setBgColor] = useState(BG_COLORS[0]!);
   const [posting, setPosting] = useState(false);
-  const [viewerList, setViewerList] = useState<{
-    viewed_at: string;
-    reaction_emoji: string | null;
-    viewer: { id: string; display_name: string; avatar_url: string | null } | null;
-  }[]>([]);
-  const [showViewerList, setShowViewerList] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [viewerList, setViewerList] = useState<Viewer[]>([]);
+  const [viewersFor, setViewersFor] = useState<string | null>(null);
+  const [viewersLoading, setViewersLoading] = useState(false);
+  const [viewersError, setViewersError] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Group contact stories by user
-  const grouped = stories.reduce<Record<string, StatusStory[]>>((acc, s) => {
-    if (!acc[s.user_id]) acc[s.user_id] = [];
-    acc[s.user_id].push(s);
-    return acc;
-  }, {});
+  useEffect(() => {
+    if (!file) { setPreview(""); return; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => setFeedback(""), 4000);
+    return () => clearTimeout(timer);
+  }, [feedback]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !posting) { setShowComposer(false); setViewersFor(null); setDeleteId(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [posting]);
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-    setPosting(true);
+  const grouped = Object.values(stories.reduce<Record<string, StatusStory[]>>((groups, story) => {
+    (groups[story.user_id] ||= []).push(story); return groups;
+  }, {}));
+  const recent = grouped.filter(group => group.some(story => !story.viewed));
+  const viewed = grouped.filter(group => group.every(story => story.viewed));
+  const openComposer = () => { setFile(null); setTextContent(""); setActionError(""); setShowComposer(true); };
+  const chooseMedia = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0];
+    event.target.value = "";
+    if (!selected) return;
+    if (!selected.type.startsWith("image/") && !selected.type.startsWith("video/")) { setActionError("Choose an image or video."); return; }
+    if (selected.size > 50 * 1024 * 1024) { setActionError("Choose a file smaller than 50 MB."); return; }
+    setFile(selected); setActionError(""); setShowComposer(true);
+  };
+  const publish = async () => {
+    if (posting || (!file && !textContent.trim()) || !user) return;
+    setPosting(true); setActionError("");
     try {
-      const res = await messagesApi.uploadMedia(file);
-      if (!res) throw new Error("Upload failed. Please try again.");
-      await postStory({ media_type: file.type.startsWith("video/") ? "video" : "photo", media_url: res });
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not post status.");
-    } finally {
-      setPosting(false);
-      e.target.value = "";
-    }
+      if (file) {
+        const url = await messagesApi.uploadMedia(file, file.name);
+        if (!url) throw new Error("Upload failed. Please try again.");
+        await postStory({ media_type: file.type.startsWith("video/") ? "video" : "photo", media_url: url });
+      } else await postStory({ media_type: "text", text_content: textContent.trim(), background_color: bgColor });
+      setShowComposer(false); setFile(null); setTextContent(""); setFeedback("Your status is live for 24 hours.");
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Could not publish your status."); }
+    finally { setPosting(false); }
   };
-
-  const handleTextPost = async () => {
-    if (!textContent.trim() || posting) return;
+  const showViewers = async (id: string) => {
+    setViewersFor(id); setViewerList([]); setViewersError(""); setViewersLoading(true);
+    try { setViewerList(await getViewers(id)); }
+    catch { setViewersError("Could not load views. Close this panel and try again."); }
+    finally { setViewersLoading(false); }
+  };
+  const removeStory = async () => {
+    if (!deleteId || posting) return;
     setPosting(true);
-    try {
-      await postStory({ media_type: "text", text_content: textContent.trim(), background_color: bgColor });
-      setTextContent("");
-      setShowTextForm(false);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not post status.");
-    } finally {
-      setPosting(false);
-    }
+    try { await deleteStory(deleteId); setDeleteId(null); setFeedback("Status deleted."); }
+    catch (error) { setActionError(error instanceof Error ? error.message : "Could not delete status."); }
+    finally { setPosting(false); }
+  };
+  const renderGroup = (group: StatusStory[]) => {
+    const latest = group[0]!;
+    const unseen = group.some(story => !story.viewed);
+    return <button key={latest.user_id} className="status-person" onClick={() => setViewerStories(group)}>
+      <Avatar src={latest.profile?.avatar_url} name={latest.profile?.display_name || "Contact"} size="lg" storyUnseen={unseen} />
+      <span className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{latest.profile?.display_name || "Contact"}</span><span className="mt-1 block text-xs text-muted">{formatDistanceToNow(new Date(latest.created_at), { addSuffix: true })} &middot; {group.length} {group.length === 1 ? "update" : "updates"}</span></span>
+      {unseen ? <span className="status-new-dot" /> : <Check size={16} className="text-muted" />}<ArrowUpRight size={16} className="text-muted" />
+    </button>;
   };
 
-  const handleViewMyStory = async (story: StatusStory) => {
-    const viewers = await getViewers(story.id);
-    setViewerList(viewers as typeof viewerList);
-    setShowViewerList(true);
-    setViewerStories(myStories);
-  };
-
-  return (
-    <div
-      className="flex flex-1 min-h-0 flex-col relative overflow-hidden"
-      style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
-    >
-      <header
-        className="flex items-center gap-4 px-4 py-3 border-b shadow-sm"
-        style={{
-          backgroundColor: "var(--bg-surface)",
-          borderColor: "var(--border-subtle)",
-          paddingTop: "max(12px, env(safe-area-inset-top, 12px))",
-        }}
-      >
-        <Link to="/" className="md:hidden transition-colors hover:opacity-70" style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="flex-1 font-semibold text-lg" style={{ color: "var(--text-main)" }}>Status</h1>
-      </header>
-
-      <div className="flex-1 overflow-y-auto pb-28">
-        {/* My status */}
-        <section className="border-b" style={{ borderColor: "var(--border-subtle)" }}>
-          <div className="flex items-center gap-3 px-4 py-3">
-            <Avatar
-              name={user?.email ?? "You"}
-              storyUnseen={myStories.length > 0}
-              size="lg"
-              onClick={() => myStories.length > 0 && handleViewMyStory(myStories[0]!)}
-            />
-            <div className="flex-1">
-              <p className="font-medium" style={{ color: "var(--text-main)" }}>My Status</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {myStories.length > 0
-                  ? `${myStories.length} update${myStories.length > 1 ? "s" : ""}`
-                  : "Tap to add status update"}
-              </p>
-            </div>
-            {myStories.length > 0 && (
-              <button
-                type="button"
-                onClick={() => handleViewMyStory(myStories[0]!)}
-                className="rounded-full p-2 hover:bg-surface"
-                style={{ color: "var(--text-muted)" }}
-              >
-                <Eye className="h-5 w-5" />
-              </button>
-            )}
-          </div>
+  return <div className="status-page">
+    <header className="status-header">
+      <Link to="/" aria-label="Back to chats" className="md:hidden status-icon-button"><ArrowLeft size={20} /></Link>
+      <span className="status-header-icon"><CircleDot size={22} /></span>
+      <div className="flex-1"><h1 className="text-lg font-semibold tracking-tight">Status</h1><p className="text-xs text-muted">Little moments. Closer connections.</p></div>
+      <button aria-label="Refresh statuses" onClick={reload} className="status-icon-button"><RefreshCw size={18} className={loading ? "animate-spin" : ""} /></button>
+      <button onClick={openComposer} className="status-primary-button"><Plus size={17} /><span className="hidden sm:inline">Create status</span><span className="sm:hidden">Create</span></button>
+    </header>
+    <div className="status-scroll">
+      <div className="status-container">
+        {feedback && <div role="status" className="status-success"><Check size={16} />{feedback}</div>}
+        {(error || (actionError && !showComposer)) && <div role="alert" className="status-error">{error || actionError}<button onClick={() => { setActionError(""); reload(); }}>Retry</button></div>}
+        <section className="status-hero">
+          <div className="status-eyebrow"><span className="status-new-dot" /> YOUR DAILY SPACE</div>
+          <h2>Share a moment.</h2><p>A thought, a photo, a glimpse of your day.<br className="hidden sm:block" /> Updates disappear after 24 hours.</p>
+          <div className="flex flex-wrap gap-3 mt-6"><button className="status-primary-button" onClick={openComposer}><Type size={17} />Write an update</button><button className="status-secondary-button" onClick={() => fileInputRef.current?.click()} disabled={posting}><ImagePlus size={17} />Photo or video</button></div>
+          <div className="status-hero-decoration" aria-hidden="true"><CircleDot /><span /><span /></div>
         </section>
-
-        {/* Recent updates */}
-        {Object.keys(grouped).length > 0 && (
-          <section>
-            <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              Recent updates
-            </p>
-            {Object.entries(grouped).map(([userId, userStories]) => {
-              const unseen = userStories.some((s) => !s.viewed);
-              const latest = userStories[0];
-              return (
-                <button
-                  key={userId}
-                  type="button"
-                  onClick={() => setViewerStories(userStories)}
-                  className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface transition-colors border-b"
-                  style={{ borderColor: "var(--border-subtle)" }}
-                >
-                  <Avatar
-                    src={latest?.profile?.avatar_url}
-                    name={latest?.profile?.display_name ?? "?"}
-                    presence={latest?.profile?.presence}
-                    size="lg"
-                    storyUnseen={unseen}
-                  />
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="truncate font-medium" style={{ color: "var(--text-main)" }}>{latest?.profile?.display_name}</p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      {userStories.length} update{userStories.length > 1 ? "s" : ""}
-                      {unseen ? " · New" : ""}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </section>
-        )}
-
-        {Object.keys(grouped).length === 0 && myStories.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center" style={{ color: "var(--text-muted)" }}>
-            <Camera className="mb-4 h-12 w-12 opacity-40" />
-            <p className="text-sm font-medium">No status updates</p>
-            <p className="mt-1 text-xs opacity-70">Post your first status below</p>
-          </div>
-        )}
-      </div>
-
-      {/* Text status form */}
-      {showTextForm && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: bgColor }}>
-          <div className="flex items-center gap-3 p-4">
-            <button type="button" onClick={() => setShowTextForm(false)} className="text-white/80">
-              <ArrowLeft className="h-6 w-6" />
-            </button>
-            <span className="text-white font-medium">Text status</span>
-          </div>
-
-          <div className="flex flex-1 items-center justify-center p-8">
-            <textarea
-              value={textContent}
-              onChange={(e) => setTextContent(e.target.value)}
-              autoFocus
-              placeholder="What's on your mind?"
-              className="w-full bg-transparent text-center text-3xl font-bold text-white outline-none resize-none placeholder:text-white/50"
-              rows={3}
-            />
-          </div>
-
-          {/* Color palette */}
-          <div className="flex justify-center gap-2 pb-4">
-            {BG_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setBgColor(c)}
-                className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
-                style={{
-                  backgroundColor: c,
-                  borderColor: bgColor === c ? "white" : "transparent",
-                }}
-              />
-            ))}
-          </div>
-
-          <div className="p-4" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom, 16px))" }}>
-            <button
-              type="button"
-              onClick={handleTextPost}
-              disabled={!textContent.trim() || posting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/20 py-3 font-semibold text-white disabled:opacity-40 hover:bg-white/30 transition-colors"
-            >
-              {posting ? "Posting..." : "Post status"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Viewer list modal */}
-      {showViewerList && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm" onClick={() => setShowViewerList(false)}>
-          <div
-            className="w-full max-h-[60vh] overflow-y-auto rounded-t-2xl p-4 border-t"
-            style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold" style={{ color: "var(--text-main)" }}>Viewed by {viewerList.length}</h3>
-              <button type="button" onClick={() => setShowViewerList(false)} style={{ color: "var(--text-muted)" }}>✕</button>
-            </div>
-            {viewerList.length === 0 && (
-              <p className="py-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>No views yet</p>
-            )}
-            {viewerList.map((v, i) => (
-              <div key={i} className="flex items-center gap-3 py-2">
-                <Avatar
-                  src={v.viewer?.avatar_url}
-                  name={v.viewer?.display_name ?? "?"}
-                  size="sm"
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium" style={{ color: "var(--text-main)" }}>{v.viewer?.display_name}</p>
-                </div>
-                {v.reaction_emoji && (
-                  <span className="text-xl">{v.reaction_emoji}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Story viewer */}
-      {viewerStories && (
-        <StoryViewer
-          stories={viewerStories}
-          onClose={() => setViewerStories(null)}
-          onView={markViewed}
-        />
-      )}
-
-      {/* FABs — positioned above mobile bottom bar */}
-      <div
-        className="fixed bottom-20 md:bottom-6 right-6 flex flex-col items-end gap-3 z-20"
-        style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
-      >
-        <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handlePhotoUpload} />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={posting}
-          className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-transform hover:scale-105"
-          style={{ backgroundColor: "var(--bg-card)", color: "var(--text-main)", border: "1px solid var(--border-subtle)" }}
-          title="Photo status"
-        >
-          <Camera className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowTextForm(true)}
-          className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105"
-          style={{ backgroundColor: "var(--color-primary)" }}
-          title="Text status"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
+        <section className="status-mine">
+          <button onClick={() => myStories.length ? setViewerStories(myStories) : openComposer()} className="flex items-center gap-3 min-w-0 text-left flex-1">
+            <span className="relative"><Avatar src={profile?.avatar_url} name={profile?.display_name || "You"} size="lg" storyUnseen={myStories.length > 0} /><span className="status-avatar-plus"><Plus size={11} /></span></span>
+            <span><span className="block text-sm font-semibold">My status</span><span className="text-xs text-muted">{myStories.length ? `${myStories.length} active ${myStories.length === 1 ? "update" : "updates"}` : "Your story starts here"}</span></span>
+          </button>
+          <span className="status-expiry"><Clock3 size={13} />24 hours</span>
+        </section>
+        {myStories.length > 0 && <div className="status-own-grid">{myStories.map(story => <article key={story.id} className="status-own-card">
+          <button className="status-thumbnail" style={{ backgroundColor: story.background_color || "var(--bg-card)" }} onClick={() => setViewerStories([story])} aria-label="View your status">
+            {story.media_type === "text" ? <span>{story.text_content}</span> : story.media_type === "video" ? <video src={story.media_url || undefined} muted preload="metadata" /> : <img src={story.media_url || undefined} alt="Your status" />}
+          </button>
+          <div className="flex items-center justify-between px-3 py-2"><button className="inline-flex items-center gap-1.5 text-xs text-muted" onClick={() => showViewers(story.id)}><Eye size={14} />Views</button><button aria-label="Delete status" className="status-icon-button" onClick={() => setDeleteId(story.id)}><Trash2 size={14} /></button></div>
+        </article>)}</div>}
+        {loading && !stories.length && !myStories.length ? <div className="status-loading" role="status"><Loader2 className="animate-spin" size={22} />Loading updates...</div> : <>
+          {recent.length > 0 && <section className="status-group"><div className="status-section-label"><h2>Recent updates</h2><span>{recent.length} new</span></div><div className="status-people">{recent.map(renderGroup)}</div></section>}
+          {viewed.length > 0 && <section className="status-group"><div className="status-section-label"><h2>Already seen</h2><Check size={14} /></div><div className="status-people">{viewed.map(renderGroup)}</div></section>}
+          {!grouped.length && !error && <section className="status-empty"><span><Camera size={24} /></span><h3>Make room for everyday moments</h3><p>Your contacts' updates will appear here.<br />Share something to get the conversation started.</p><button onClick={() => fileInputRef.current?.click()} className="status-text-button">Share your first photo <ArrowUpRight size={14} /></button></section>}
+        </>}
+        <p className="status-footer"><Clock3 size={12} />A fresh start, every 24 hours</p>
       </div>
     </div>
-  );
+    <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={chooseMedia} />
+    {showComposer && <div className="status-modal-backdrop" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="status-composer-title" className="status-composer">
+      <header><div><h2 id="status-composer-title">Create a status</h2><p>Share a moment for the next 24 hours</p></div><button disabled={posting} aria-label="Close composer" className="status-icon-button" onClick={() => setShowComposer(false)}><X size={20} /></button></header>
+      <div className="status-compose-preview" style={{ backgroundColor: file ? "#111827" : bgColor }}>
+        {file ? file.type.startsWith("video/") ? <video src={preview} controls playsInline /> : <img src={preview} alt="Preview before publishing" /> : <textarea autoFocus value={textContent} maxLength={700} onChange={event => setTextContent(event.target.value)} placeholder="What's on your mind?" aria-label="Status text" />}
+      </div>
+      {!file && <div className="status-palette">{BG_COLORS.map((color, index) => <button key={color} aria-label={`Background color ${index + 1}`} aria-pressed={bgColor === color} onClick={() => setBgColor(color)} style={{ backgroundColor: color }} className={bgColor === color ? "selected" : ""}>{bgColor === color && <Check size={14} />}</button>)}<span>{textContent.length}/700</span></div>}
+      {actionError && <div className="status-error mx-5" role="alert">{actionError}</div>}
+      <footer><button disabled={posting} className="status-secondary-button" onClick={() => fileInputRef.current?.click()}><ImagePlus size={16} />{file ? "Change media" : "Add media"}</button><button disabled={posting || (!file && !textContent.trim())} className="status-primary-button" onClick={publish}>{posting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}{posting ? "Publishing..." : "Publish status"}</button></footer>
+    </section></div>}
+    {viewersFor && <div className="status-modal-backdrop" onClick={() => setViewersFor(null)}><section role="dialog" aria-modal="true" aria-labelledby="status-views-title" className="status-dialog" onClick={event => event.stopPropagation()}><header><h2 id="status-views-title">Status views</h2><button aria-label="Close viewers" onClick={() => setViewersFor(null)} className="status-icon-button"><X size={20} /></button></header>{viewersError ? <p role="alert" className="status-error">{viewersError}</p> : viewersLoading ? <p className="status-loading"><Loader2 className="animate-spin" />Loading views...</p> : viewerList.length ? viewerList.map(view => <div key={view.viewer?.id || view.viewed_at} className="flex items-center gap-3 py-3"><Avatar src={view.viewer?.avatar_url} name={view.viewer?.display_name || "Contact"} size="sm" /><div className="flex-1"><p className="text-sm font-medium">{view.viewer?.display_name || "Contact"}</p><p className="text-xs text-muted">{formatDistanceToNow(new Date(view.viewed_at), { addSuffix: true })}</p></div>{view.reaction_emoji}</div>) : <div className="status-empty"><Eye size={24} /><h3>No views yet</h3><p>See who stops by as your contacts catch up.</p></div>}</section></div>}
+    {deleteId && <div className="status-modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="delete-status-title" className="status-dialog"><h2 id="delete-status-title" className="font-semibold text-lg">Delete this status?</h2><p className="text-sm text-muted mt-2 mb-6">This update will be removed from your status.</p>{actionError && <p role="alert" className="status-error">{actionError}</p>}<div className="flex justify-end gap-3"><button disabled={posting} className="status-secondary-button" onClick={() => setDeleteId(null)}>Keep status</button><button disabled={posting} className="status-primary-button" onClick={removeStory}>{posting ? "Deleting..." : "Delete status"}</button></div></section></div>}
+    {viewerStories && <StoryViewer stories={viewerStories} onClose={() => setViewerStories(null)} onView={markViewed} />}
+  </div>;
 }

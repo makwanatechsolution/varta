@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import type { StatusStory } from "../../types/database";
 import { Avatar } from "../ui/Avatar";
 import { formatDistanceToNow } from "date-fns";
-
-// ─── StoryViewer ──────────────────────────────────────────────────────────────
 
 interface StoryViewerProps {
   stories: StatusStory[];
@@ -13,118 +11,82 @@ interface StoryViewerProps {
   onView: (id: string) => void;
 }
 
-const STORY_DURATION_MS = 5000;
-
 export function StoryViewer({ stories, initialIndex = 0, onClose, onView }: StoryViewerProps) {
   const [index, setIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
-
+  const [paused, setPaused] = useState(false);
+  const [duration, setDuration] = useState(5000);
+  const [mediaError, setMediaError] = useState(false);
+  const elapsed = useRef(0);
+  const video = useRef<HTMLVideoElement>(null);
+  const viewCallback = useRef(onView);
+  viewCallback.current = onView;
+  const closeCallback = useRef(onClose);
+  closeCallback.current = onClose;
   const story = stories[index];
+  const advance = () => { if (index < stories.length - 1) setIndex(index + 1); else closeCallback.current(); };
+  const goBack = () => { if (index > 0) setIndex(index - 1); };
 
-  // Auto-advance timer
   useEffect(() => {
     if (!story) return;
-    onView(story.id);
-    setProgress(0);
+    elapsed.current = 0; setProgress(0); setPaused(false); setMediaError(false);
+    setDuration(story.media_type === "video" ? 60000 : 5000);
+    viewCallback.current(story.id);
+  }, [story?.id]);
 
-    const start = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min((elapsed / STORY_DURATION_MS) * 100, 100);
-      setProgress(pct);
-      if (pct < 100) {
-        raf = requestAnimationFrame(tick);
-      } else {
-        advance();
-      }
+  useEffect(() => {
+    if (!story || paused) return;
+    let previous = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      elapsed.current += now - previous;
+      previous = now;
+      const percent = Math.min(elapsed.current / duration * 100, 100);
+      setProgress(percent);
+      if (percent < 100) raf = requestAnimationFrame(tick);
+      else advance();
     };
-
-    let raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [story?.id, paused, duration]);
+
+  useEffect(() => {
+    if (!video.current) return;
+    if (paused) video.current.pause();
+    else video.current.play().catch(() => setPaused(true));
+  }, [paused, story?.id]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeCallback.current();
+      if (event.key === "ArrowRight") advance();
+      if (event.key === "ArrowLeft") goBack();
+      if (event.code === "Space") { event.preventDefault(); setPaused(value => !value); }
+    };
+    const visibility = () => { if (document.hidden) setPaused(true); };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("visibilitychange", visibility);
+    return () => { window.removeEventListener("keydown", onKey); document.removeEventListener("visibilitychange", visibility); };
+  }, [index, stories.length]);
 
   if (!story) return null;
-
-  const advance = () => {
-    if (index < stories.length - 1) setIndex(index + 1);
-    else onClose();
-  };
-
-  const goBack = () => {
-    if (index > 0) setIndex(index - 1);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black">
-      {/* Progress bars */}
-      <div className="flex gap-1 p-2 pt-safe">
-        {stories.map((_, i) => (
-          <div key={i} className="h-0.5 flex-1 overflow-hidden rounded bg-white/30">
-            <div
-              className="h-full bg-white transition-none"
-              style={{
-                width: i < index ? "100%" : i === index ? `${progress}%` : "0%",
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2">
-        <Avatar src={story.profile?.avatar_url} name={story.profile?.display_name ?? "?"} size="sm" />
-        <div>
-          <span className="text-sm font-semibold text-white">{story.profile?.display_name}</span>
-          <p className="text-xs text-white/60">
-            {formatDistanceToNow(new Date(story.created_at), { addSuffix: true })}
-          </p>
-        </div>
-        <button type="button" onClick={onClose} className="ml-auto text-white/80 hover:text-white">
-          <X className="h-6 w-6" />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden">
-        {/* Back zone */}
-        <button type="button" className="absolute left-0 z-10 h-full w-1/3" onClick={goBack}>
-          {index > 0 && <ChevronLeft className="ml-2 h-8 w-8 text-white/40" />}
-        </button>
-
-        {story.media_type === "text" ? (
-          <div
-            className="flex h-full w-full items-center justify-center p-10 text-center text-3xl font-bold leading-tight text-white"
-            style={{ backgroundColor: story.background_color }}
-          >
-            {story.text_content}
-          </div>
-        ) : story.media_url ? (
-          story.media_type === "video" ? (
-            <video
-              src={story.media_url}
-              autoPlay
-              playsInline
-              className="max-h-full max-w-full object-contain"
-            />
-          ) : (
-            <img
-              src={story.media_url}
-              alt="Story"
-              className="max-h-full max-w-full object-contain"
-            />
-          )
-        ) : null}
-
-        {/* Forward zone */}
-        <button type="button" className="absolute right-0 z-10 h-full w-1/3 flex items-center justify-end" onClick={advance}>
-          <ChevronRight className="mr-2 h-8 w-8 text-white/40" />
-        </button>
+  return <div role="dialog" aria-modal="true" aria-label="Status viewer" className="fixed inset-0 z-[70] flex flex-col bg-[#070d12]">
+    <div className="w-full max-w-3xl mx-auto flex flex-1 min-h-0 flex-col" style={{ paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+      <div className="flex gap-1 px-4 pt-4" aria-hidden="true">{stories.map((item, position) => <div key={item.id} className="h-0.5 flex-1 overflow-hidden rounded bg-white/20"><div className="h-full bg-white" style={{ width: position < index ? "100%" : position === index ? `${progress}%` : "0%" }} /></div>)}</div>
+      <header className="flex items-center gap-3 p-4">
+        <Avatar src={story.profile?.avatar_url} name={story.profile?.display_name || "You"} size="sm" />
+        <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{story.profile?.display_name || "Your status"}</p><p className="mt-1 text-xs text-white/50">{formatDistanceToNow(new Date(story.created_at), { addSuffix: true })}</p></div>
+        <button aria-label={paused ? "Play status" : "Pause status"} onClick={() => setPaused(value => !value)} className="p-2 text-white/80">{paused ? <Play size={20} /> : <Pause size={20} />}</button>
+        <button aria-label="Close status" onClick={onClose} className="p-2 text-white/80"><X size={22} /></button>
+      </header>
+      <div className="relative flex flex-1 min-h-0 items-center justify-center overflow-hidden md:rounded-2xl md:mb-6">
+        <button aria-label="Previous status" disabled={index === 0} className="absolute left-0 z-10 h-full w-1/4 flex items-center disabled:opacity-0" onClick={goBack}><ChevronLeft className="ml-3 h-7 w-7 text-white/40" /></button>
+        {mediaError ? <p role="alert" className="p-8 text-sm text-white/70">This media could not load. Try opening the status again.</p> : story.media_type === "text" ? <div className="flex h-full w-full items-center justify-center p-10 text-center text-3xl font-semibold leading-relaxed text-white whitespace-pre-wrap break-words" style={{ backgroundColor: story.background_color || "#165d74" }}>{story.text_content}</div> : story.media_url ? story.media_type === "video" ? <video key={story.id} ref={video} src={story.media_url} autoPlay playsInline onLoadedMetadata={event => { if (Number.isFinite(event.currentTarget.duration)) setDuration(event.currentTarget.duration * 1000); }} onEnded={advance} onError={() => setMediaError(true)} className="max-h-full max-w-full object-contain" /> : <img src={story.media_url} alt="Status update" onError={() => setMediaError(true)} className="max-h-full max-w-full object-contain" /> : null}
+        <button aria-label="Next status" className="absolute right-0 z-10 h-full w-1/4 flex items-center justify-end" onClick={advance}><ChevronRight className="mr-3 h-7 w-7 text-white/40" /></button>
       </div>
     </div>
-  );
+  </div>;
 }
-
-// ─── StoryBar ─────────────────────────────────────────────────────────────────
 
 interface StoryBarProps {
   myStories: StatusStory[];

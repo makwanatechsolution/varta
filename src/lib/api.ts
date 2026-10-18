@@ -27,16 +27,27 @@ async function getAuthToken(forceRefresh = false): Promise<string> {
   return user.getIdToken(forceRefresh);
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("The Varta server took too long to respond. Please retry the connection.");
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
 // Shared by JSON requests and uploads so expired sessions recover consistently.
 async function authenticatedFetch(path: string, options: RequestInit = {}): Promise<Response> {
   await firebaseAuth.authStateReady();
   const user = firebaseAuth.currentUser;
   const headers = new Headers(options.headers);
   headers.set("Authorization", `Bearer ${await getAuthToken()}`);
-  let response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  let response = await fetchWithTimeout(`${BASE_URL}${path}`, { ...options, headers });
   if (response.status === 401 && firebaseAuth.currentUser === user) {
     headers.set("Authorization", `Bearer ${await getAuthToken(true)}`);
-    response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    response = await fetchWithTimeout(`${BASE_URL}${path}`, { ...options, headers });
   }
   return response;
 }
@@ -235,6 +246,8 @@ export const invitationsApi = {
 // ─── Push Tokens ──────────────────────────────────────────────────────────────
 
 export const pushTokensApi = {
+  remove: (token: string) => api.post("/api/push-tokens/remove", { token }),
+  test: () => api.post<{ sent: number; failed: number }>("/api/push-tokens/test", {}),
   upsert: (token: string, platform = "web") =>
     api.post("/api/push-tokens", { token, platform }),
 };

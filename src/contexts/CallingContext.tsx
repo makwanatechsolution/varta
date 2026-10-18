@@ -103,6 +103,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const activeCallRef = useRef<Call | null>(null);
+  const incomingCallRef = useRef<Call | null>(null);
   const callStatusRef = useRef<CallStatus | null>(null);
   const ringTimerRef = useRef<number | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -111,6 +112,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
   const signalUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
+  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
   useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
 
   // Load available audio devices
@@ -298,13 +300,9 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission().catch(() => {});
-    }
-
     const handleIncomingCall = async (payload: any) => {
       const { call, initiatorProfile } = payload || {};
-      if (!call || call.initiator_id === user.uid) return;
+      if (!call || call.initiator_id === user.uid || incomingCallRef.current?.id === call.id) return;
       if (callStatusRef.current && ["calling", "ringing", "connecting", "connected", "active"].includes(callStatusRef.current)) {
         // Busy — send busy signal
         await callsApi.update(call.id, { status: "declined", ended_at: new Date().toISOString() });
@@ -317,22 +315,11 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       }
 
       setOtherParticipant(initiatorProfile as Profile);
+      incomingCallRef.current = call;
       setIncomingCall(call);
       setCallStatus("ringing");
       callAudio.playIncomingRing();
       startTitleFlashing(initiatorProfile?.display_name || "Someone");
-
-      if ("Notification" in window && Notification.permission === "granted") {
-        try {
-          const notif = new Notification(`Incoming Call from ${initiatorProfile?.display_name || "Someone"}`, {
-            body: call.type === "video" ? "📹 Incoming Video Call" : "📞 Incoming Voice Call",
-            icon: initiatorProfile?.avatar_url || "/favicon.svg",
-            tag: `call-${call.id}`,
-            requireInteraction: true,
-          });
-          notif.onclick = () => { window.focus(); notif.close(); };
-        } catch (e) { /* ignore */ }
-      }
 
       // 30-Second Timeout for auto-missed call
       if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
@@ -353,7 +340,7 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
 
     const handleCallUpdate = (payload: any) => {
       const updated = payload as Call;
-      if (incomingCall && incomingCall.id === updated.id) {
+      if (incomingCallRef.current?.id === updated.id) {
         if (["ended", "declined", "missed"].includes(updated.status)) {
           callAudio.stop();
           stopTitleFlashing();
@@ -375,12 +362,23 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    let disposed = false;
+    const recoverRingingCall = async () => {
+      if (document.hidden || callStatusRef.current) return;
+      const { data } = await callsApi.list();
+      if (disposed || callStatusRef.current) return;
+      const pending = data?.find((call: any) => call.initiator_id !== user.uid && call.status === "ringing" && Date.now() - new Date(call.started_at || call.created_at).getTime() < 30000);
+      if (pending) handleIncomingCall({ call: pending, initiatorProfile: pending.initiator });
+    };
     const unsub1 = vartaWS.on(`calls:${user.uid}`, "incoming_call", handleIncomingCall);
     const unsub2 = vartaWS.on(`calls:${user.uid}`, "call_updated", handleCallUpdate);
-
+    const unsubConnected = vartaWS.on("connection", "connected", recoverRingingCall);
+    document.addEventListener("visibilitychange", recoverRingingCall);
+    recoverRingingCall();
     return () => {
-      unsub1();
-      unsub2();
+      disposed = true;
+      unsub1(); unsub2(); unsubConnected();
+      document.removeEventListener("visibilitychange", recoverRingingCall);
     };
   }, [user, startTitleFlashing, stopTitleFlashing]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -430,20 +428,6 @@ export function CallingProvider({ children }: { children: React.ReactNode }) {
         signal_type: "offer",
         payload: offer,
       });
-
-      // FCM push for wake-up
-      fetch("/api/sendCallPush", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          callId: (call as Call).id,
-          conversationId,
-          initiatorId: user.uid,
-          initiatorName: user.displayName || "Varta User",
-          callType: type,
-          recipientIds: targetUser ? [targetUser.id] : [],
-        }),
-      }).catch(() => {});
 
       // 30s timeout for unanswered call
       if (ringTimerRef.current) clearTimeout(ringTimerRef.current);

@@ -17,7 +17,7 @@ function harness(statuses, user = { getIdToken: async force => force ? 'fresh' :
   source += '\nglobalThis.client = { api, messagesApi };';
   const context = vm.createContext({
     firebaseAuth: { currentUser: user, authStateReady: async () => {} },
-    Headers, FormData, Blob, console,
+    Headers, FormData, Blob, console, AbortController, setTimeout, clearTimeout,
     fetch: async (url, options) => {
       requests.push({ url, headers: new Headers(options.headers), body: options.body });
       const status = statuses.shift() ?? 200;

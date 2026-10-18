@@ -240,3 +240,13 @@ cd server && npm run dev
 ## 📄 License
 
 MIT © 2026 Makwana Tech Solution. All rights reserved.
+
+### Push notifications
+
+Configure the frontend with the Firebase web app settings and `VITE_FIREBASE_VAPID_KEY` from that project's Cloud Messaging Web Push certificates. Set `VITE_API_URL` to the Express API origin. On the backend, set `FIREBASE_PROJECT_ID` to the same project and provide `FIREBASE_SERVICE_ACCOUNT_KEY` (or Application Default Credentials with permission to send FCM messages). Token verification alone does not configure message delivery.
+
+Deploy both the frontend and backend. In **Settings > Notifications & Sound**, choose **Enable notifications**, allow browser permission, and select **Send test notification**. Registration and delivery failures appear in Settings; individual delivery errors are logged on the backend. Permission is requested from the button, while previously permitted devices reconnect automatically.
+
+Use HTTPS for deployed web push. For iPhone/iPad, add Varta to the Home Screen and launch it there before enabling notifications. The included manifest supports standalone launch. See [Firebase web message delivery](https://firebase.google.com/docs/cloud-messaging/web/receive-messages) and [FCM delivery errors](https://firebase.google.com/docs/cloud-messaging/error-codes).
+
+Run the regression checks with `node --test tests/*.test.mjs`.
