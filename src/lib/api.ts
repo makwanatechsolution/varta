@@ -20,14 +20,25 @@ if (typeof window !== "undefined") {
 
 // ─── Token Helper ──────────────────────────────────────────────────────────────
 
-async function getAuthToken(): Promise<string | null> {
-  try {
-    const user = firebaseAuth.currentUser;
-    if (!user) return null;
-    return await user.getIdToken();
-  } catch {
-    return null;
+async function getAuthToken(forceRefresh = false): Promise<string> {
+  await firebaseAuth.authStateReady();
+  const user = firebaseAuth.currentUser;
+  if (!user) throw new Error("Please sign in to continue.");
+  return user.getIdToken(forceRefresh);
+}
+
+// Shared by JSON requests and uploads so expired sessions recover consistently.
+async function authenticatedFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  await firebaseAuth.authStateReady();
+  const user = firebaseAuth.currentUser;
+  const headers = new Headers(options.headers);
+  headers.set("Authorization", `Bearer ${await getAuthToken()}`);
+  let response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  if (response.status === 401 && firebaseAuth.currentUser === user) {
+    headers.set("Authorization", `Bearer ${await getAuthToken(true)}`);
+    response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   }
+  return response;
 }
 
 // ─── Core Fetch Wrapper ────────────────────────────────────────────────────────
@@ -42,14 +53,9 @@ async function apiFetch<T = unknown>(
   options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
   try {
-    const token = await getAuthToken();
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-      ...(options.headers as Record<string, string> | undefined),
-    };
-    if (token) (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-
-    const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    const headers = new Headers(options.headers);
+    headers.set("Content-Type", "application/json");
+    const res = await authenticatedFetch(path, { ...options, headers });
     if (!res.ok) {
       let errMsg = `HTTP ${res.status}`;
       try {
@@ -87,12 +93,10 @@ export const profilesApi = {
   search: (query: string) => api.get<any[]>(`/api/profiles/search?q=${encodeURIComponent(query)}`),
   updatePresence: (presence: string) => api.patch("/api/profiles/me/presence", { presence }),
   uploadAvatar: async (file: File): Promise<string | null> => {
-    const token = await getAuthToken();
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(`${BASE_URL}/api/upload/avatar`, {
+    const res = await authenticatedFetch("/api/upload/avatar", {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,
     });
     if (!res.ok) return null;
@@ -149,12 +153,10 @@ export const messagesApi = {
   star: (messageId: string, starred: boolean) =>
     api.patch(`/api/messages/${messageId}/star`, { starred }),
   uploadMedia: async (file: File | Blob, fileName?: string): Promise<string | null> => {
-    const token = await getAuthToken();
     const fd = new FormData();
     fd.append("file", file, fileName || "upload");
-    const res = await fetch(`${BASE_URL}/api/upload/media`, {
+    const res = await authenticatedFetch("/api/upload/media", {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,
     });
     if (!res.ok) return null;

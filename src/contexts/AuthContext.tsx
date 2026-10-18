@@ -37,111 +37,50 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const ADMIN_EMAILS = ["yash.makwana.b@gmail.com"];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const buildProfileFromUser = (u: FirebaseUser): Profile => {
-    const emailLower = (u.email || "").toLowerCase().trim();
-    const isAdmin = ADMIN_EMAILS.includes(emailLower);
-    return {
-      id: u.uid,
-      username: u.email?.split("@")[0] || "user",
-      display_name: u.displayName || u.email?.split("@")[0] || "User",
-      avatar_url: u.photoURL || null,
-      bio: "",
-      phone: null,
-      last_seen: new Date().toISOString(),
-      presence: "online",
-      custom_status: null,
-      custom_status_expires_at: null,
-      status_privacy: "everyone",
-      is_approved: isAdmin, // Only designated admins are pre-approved. Regular signups must be approved by admin!
-      is_admin: isAdmin,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as Profile;
-  };
-
-  const fetchProfile = async (retry = 0) => {
-    try {
-      const { data, error } = await profilesApi.getMe();
-      const currentUserEmail = (firebaseAuth.currentUser?.email || "").toLowerCase().trim();
-      const isTargetAdmin = ADMIN_EMAILS.includes(currentUserEmail);
-
-      if (data) {
-        setProfile({
-          ...data,
-          is_admin: isTargetAdmin ? true : Boolean((data as Profile).is_admin),
-          is_approved: isTargetAdmin ? true : Boolean((data as Profile).is_approved),
-        } as Profile);
-      } else {
-        console.warn("[Auth] fetchProfile warning:", error);
-        if (firebaseAuth.currentUser) {
-          setProfile((prev) => prev ?? buildProfileFromUser(firebaseAuth.currentUser!));
-        }
-        if (retry < 2) setTimeout(() => fetchProfile(retry + 1), 2000);
-      }
-    } catch (err) {
-      console.warn("[Auth] fetchProfile failed:", err);
-      if (firebaseAuth.currentUser) {
-        setProfile((prev) => prev ?? buildProfileFromUser(firebaseAuth.currentUser!));
-      }
-      if (retry < 2) setTimeout(() => fetchProfile(retry + 1), 2000);
-    }
+  const fetchProfile = async () => {
+    const currentUser = firebaseAuth.currentUser;
+    if (!currentUser) return;
+    const { data, error } = await profilesApi.getMe();
+    if (firebaseAuth.currentUser !== currentUser) return;
+    if (data) setProfile(data as Profile);
+    else console.warn("[Auth] Profile unavailable:", error);
   };
 
   useEffect(() => {
-    // 1. Check if user just returned from a Google OAuth redirect
-    handleFirebaseGoogleRedirect()
-      .then((res) => {
-        if (res?.user) {
-          const u = res.user;
-          Object.defineProperty(u, "id", { get: () => u.uid, configurable: true });
-          const authUser = u as AuthUser;
-          setUser(authUser);
-          setProfile((prev) => prev ?? buildProfileFromUser(authUser));
-          setLoading(false);
-          fetchProfile();
-        }
-      })
-      .catch((err) => {
-        console.warn("[Auth] Firebase Google redirect error:", err);
-      });
-
-    // 2. Main Firebase auth state subscription
+    let active = true;
+    handleFirebaseGoogleRedirect().catch(console.warn);
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
-      if (firebaseUser) {
-        Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
-        const authUser = firebaseUser as AuthUser;
-        setUser(authUser);
-        setProfile((prev) => prev ?? buildProfileFromUser(authUser));
-        setLoading(false);
-        fetchProfile();
-      } else {
+      setProfile(null);
+      if (!firebaseUser) {
         setUser(null);
-        setProfile(null);
         setLoading(false);
+        return;
+      }
+      Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser.uid, configurable: true });
+      setUser(firebaseUser as AuthUser);
+      setLoading(true);
+      try {
+        const { data, error } = await profilesApi.getMe();
+        if (active && firebaseAuth.currentUser === firebaseUser) {
+          if (data) setProfile(data as Profile);
+          else console.warn("[Auth] Profile unavailable:", error);
+        }
+      } finally {
+        if (active && firebaseAuth.currentUser === firebaseUser) setLoading(false);
       }
     });
-    return unsubscribe;
+    return () => { active = false; unsubscribe(); };
   }, []);
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
-      if (cred.user) {
-        Object.defineProperty(cred.user, "id", { get: () => cred.user.uid, configurable: true });
-        const authUser = cred.user as AuthUser;
-        setUser(authUser);
-        setProfile(buildProfileFromUser(authUser));
-        setLoading(false);
-        fetchProfile();
-      }
+      await signInWithEmailAndPassword(firebaseAuth, email, password);
     } catch (err) {
       setLoading(false);
       throw err;
@@ -168,10 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (firebaseUser) {
         Object.defineProperty(firebaseUser, "id", { get: () => firebaseUser!.uid, configurable: true });
         const authUser = firebaseUser as AuthUser;
-        setUser(authUser);
-        setProfile(buildProfileFromUser(authUser));
-        setLoading(false);
-        fetchProfile();
         return authUser;
       }
       return null;
@@ -186,23 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       await updateProfile(cred.user, { displayName });
-      if (cred.user) {
-        Object.defineProperty(cred.user, "id", { get: () => cred.user.uid, configurable: true });
-        const authUser = cred.user as AuthUser;
-        setUser(authUser);
-        setProfile(buildProfileFromUser(authUser));
-        setLoading(false);
-        fetchProfile();
-      }
-      try {
-        await fetch("/api/notifyAdminSignup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userName: displayName }),
-        });
-      } catch (err) {
-        console.warn("Failed to send admin notification:", err);
-      }
+      await profilesApi.update({ display_name: displayName });
     } catch (err) {
       setLoading(false);
       throw err;

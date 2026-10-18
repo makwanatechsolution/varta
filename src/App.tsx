@@ -51,10 +51,10 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
       <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center" style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}>
         <div className="max-w-md p-6 rounded-2xl bg-[#111b21] border border-zinc-800 space-y-4">
           <p className="font-semibold text-lg text-white">Connecting to Varta Server</p>
-          <p className="text-xs text-zinc-400">Server is starting up on Render (free instance waking up). Please wait a few seconds and click Retry.</p>
+          <p className="text-xs text-zinc-400">Your account could not connect to the server. Check your connection and retry.</p>
           <div className="flex gap-3 justify-center pt-2">
             <button
-              onClick={() => { setProfileTimeout(false); refreshProfile(); }}
+              onClick={() => { refreshProfile(); }}
               className="px-4 py-2 rounded-xl bg-[#1E88C7] text-white text-xs font-semibold hover:bg-[#1E88C7]/80"
             >
               Retry Connection
@@ -74,15 +74,7 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
   if (requireAdmin && !profile?.is_admin) return <Navigate to="/" replace />;
   
-  const isApprovedOrAdmin = profile?.is_approved || profile?.is_admin;
-
-  if (!isApprovedOrAdmin && location.pathname !== '/pending') {
-    return <Navigate to="/pending" replace />;
-  }
-
-  if (isApprovedOrAdmin && location.pathname === '/pending') {
-    return <Navigate to="/" replace />;
-  }
+  if (location.pathname === "/pending") return <Navigate to="/" replace />;
 
   return <>{children}</>;
 }

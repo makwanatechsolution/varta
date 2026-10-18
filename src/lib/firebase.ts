@@ -11,11 +11,11 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyACrSOGWT7bdCLNdJvD1UijODymlQxKcb8",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "chatapp-varta.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "chatapp-varta",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "513968664368",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:513968664368:web:d20d6a0be682ef57c062f5",
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
@@ -105,7 +105,9 @@ export async function requestPushPermission(_userId: string) {
 
     const messaging = getMessaging(firebaseApp);
     const token = await getToken(messaging, {
-      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+      vapidKey:
+        import.meta.env.VITE_FIREBASE_VAPID_KEY ||
+        "BK8TZC-7gexGHsrcE33zfm6d5hYYbatTEUFMHB61RjxLKInRTWtYNaMueuGTHEafwYxtmn47eUnAgmSaJ98u8cA",
       serviceWorkerRegistration: registration,
     });
 

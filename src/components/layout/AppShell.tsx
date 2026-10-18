@@ -331,6 +331,7 @@ export function AppShell() {
       <main
         className={clsx(
           "flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden",
+          !location.pathname.startsWith("/chat/") && "pb-[calc(56px+env(safe-area-inset-bottom,0px))] md:pb-0",
           isMobileShowingContent ? "flex" : "hidden md:flex"
         )}
         style={{ backgroundColor: "var(--bg-main)" }}

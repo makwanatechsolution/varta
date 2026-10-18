@@ -27,9 +27,9 @@ if (!getApps().length) {
       const serviceAccount = JSON.parse(rawKey);
       initializeApp({
         credential: cert(serviceAccount),
-        projectId: serviceAccount.project_id || FIREBASE_PROJECT_ID,
+        projectId: FIREBASE_PROJECT_ID,
       });
-      console.log("[Firebase Admin] Initialized with Service Account for project:", serviceAccount.project_id || FIREBASE_PROJECT_ID);
+      console.log("[Firebase Admin] Initialized with Service Account for project:", FIREBASE_PROJECT_ID);
     } else {
       initializeApp({ projectId: FIREBASE_PROJECT_ID });
       console.log("[Firebase Admin] Initialized with Project ID:", FIREBASE_PROJECT_ID);
@@ -119,31 +119,6 @@ async function verifyToken(token: string): Promise<{
     console.warn("[verifyToken] Firebase Admin verifyIdToken error:", err?.message || err);
   }
 
-  // 2. Resilient Fallback: Parse & validate claims from standard Firebase ID token
-  try {
-    const parts = token.split(".");
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
-      const now = Math.floor(Date.now() / 1000);
-      const validAudience = payload.aud === FIREBASE_PROJECT_ID;
-      const validIssuer = payload.iss === `https://securetoken.google.com/${FIREBASE_PROJECT_ID}` || payload.iss?.includes(FIREBASE_PROJECT_ID);
-      const notExpired = payload.exp && payload.exp > now;
-      const uidVal = payload.sub || payload.user_id;
-
-      if (uidVal && notExpired && (validAudience || validIssuer)) {
-        console.log(`[verifyToken] Fallback claim verification succeeded for UID: ${uidVal}`);
-        return {
-          uid: uidVal,
-          email: (payload.email || "").toLowerCase().trim(),
-          displayName: payload.name || payload.email || "User",
-          avatarUrl: payload.picture || null,
-        };
-      }
-    }
-  } catch (parseErr) {
-    console.warn("[verifyToken] Fallback JWT parse error:", parseErr);
-  }
-
   return null;
 }
 
@@ -184,8 +159,8 @@ async function ensureProfile(req: Request) {
       const countRes = await db.query("SELECT COUNT(*) FROM profiles").catch(() => ({ rows: [{ count: 0 }] }));
       const isFirstUser = parseInt(countRes.rows[0]?.count || "0", 10) === 0;
       const isAdmin = isFirstUser || isTargetAdmin;
-      // ONLY admin accounts are pre-approved. Normal users MUST be approved by an administrator before using the app!
-      const isApproved = isAdmin;
+      // Registration is open; admin privileges remain separate.
+      const isApproved = true;
 
       await db.query(
         `INSERT INTO profiles (id, display_name, avatar_url, is_approved, is_admin, created_at, updated_at)
@@ -201,6 +176,7 @@ async function ensureProfile(req: Request) {
     }
   } catch (err) {
     console.error("[ensureProfile] Error creating/updating profile:", err);
+    throw err;
   }
 }
 
@@ -360,15 +336,6 @@ app.patch("/api/profiles/me/presence", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/profiles/:id
-app.get("/api/profiles/:id", requireAuth, async (req, res) => {
-  const { rows } = await db.query(
-    "SELECT id, display_name, username, avatar_url, bio, presence, last_seen, custom_status, is_approved, is_admin FROM profiles WHERE id = $1",
-    [req.params.id],
-  );
-  res.json(rows[0] || null);
-});
-
 // GET /api/profiles/search?q=
 app.get("/api/profiles/search", requireAuth, async (req, res) => {
   const q = (req.query.q as string || "").trim();
@@ -381,19 +348,28 @@ app.get("/api/profiles/search", requireAuth, async (req, res) => {
   res.json(rows);
 });
 
+// GET /api/profiles/:id
+app.get("/api/profiles/:id", requireAuth, async (req, res) => {
+  const { rows } = await db.query(
+    "SELECT id, display_name, username, avatar_url, bio, presence, last_seen, custom_status, is_approved, is_admin FROM profiles WHERE id = $1",
+    [req.params.id],
+  );
+  res.json(rows[0] || null);
+});
+
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
 
-const APP_URL = process.env.APP_URL || process.env.VITE_APP_URL || "http://localhost";
+const PUBLIC_API_URL = (process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || "https://api.chat.makwanatechsolution.in").replace(/\/$/, "");
 
 app.post("/api/upload/avatar", requireAuth, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
-  const url = `${APP_URL}/uploads/${req.file.filename}`;
+  const url = `${PUBLIC_API_URL}/uploads/${req.file.filename}`;
   res.json({ url });
 });
 
 app.post("/api/upload/media", requireAuth, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file" });
-  const url = `${APP_URL}/uploads/${req.file.filename}`;
+  const url = `${PUBLIC_API_URL}/uploads/${req.file.filename}`;
   res.json({ url });
 });
 
@@ -897,6 +873,7 @@ app.post("/api/statuses", requireAuth, async (req, res) => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,false,NOW()) RETURNING *`,
     [sId, uid(req), media_type, media_url || null, text_content || null, background_color || "#1E88C7", expires_at],
   );
+  broadcast("statuses", "updated", { id: sId });
   res.json(rows[0]);
 });
 
@@ -920,6 +897,7 @@ app.get("/api/statuses/:id/views", requireAuth, async (req, res) => {
 
 app.delete("/api/statuses/:id", requireAuth, async (req, res) => {
   await db.query("UPDATE statuses SET is_deleted = true WHERE id = $1 AND user_id = $2", [req.params.id, uid(req)]);
+  broadcast("statuses", "updated", { id: req.params.id });
   res.json({ ok: true });
 });
 

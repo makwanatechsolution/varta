@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { vartaWS } from "../lib/ws";
 import { statusesApi } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 import type { StatusStory } from "../types/database";
@@ -27,6 +28,11 @@ export function useStories() {
 
   useEffect(() => {
     load();
+    const offStatus = vartaWS.on("statuses", "updated", load);
+    const offConnect = vartaWS.on("connection", "connected", load);
+    const refresh = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", refresh);
+    return () => { offStatus(); offConnect(); document.removeEventListener("visibilitychange", refresh); };
   }, [load]);
 
   const postStory = async (opts: {
@@ -36,10 +42,11 @@ export function useStories() {
     background_color?: string;
   }) => {
     if (!user) return;
-    await statusesApi.create({
+    const { error } = await statusesApi.create({
       ...opts,
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     });
+    if (error) throw new Error(error);
     await load();
   };
 

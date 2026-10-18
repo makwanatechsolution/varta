@@ -39,24 +39,30 @@ export function StatusPage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setPosting(true);
-    const res = await messagesApi.uploadMedia(file);
-    if (res) {
-      await postStory({
-        media_type: file.type.startsWith("video/") ? "video" : "photo",
-        media_url: res,
-      });
+    try {
+      const res = await messagesApi.uploadMedia(file);
+      if (!res) throw new Error("Upload failed. Please try again.");
+      await postStory({ media_type: file.type.startsWith("video/") ? "video" : "photo", media_url: res });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not post status.");
+    } finally {
+      setPosting(false);
+      e.target.value = "";
     }
-    setPosting(false);
-    e.target.value = "";
   };
 
   const handleTextPost = async () => {
-    if (!textContent.trim()) return;
+    if (!textContent.trim() || posting) return;
     setPosting(true);
-    await postStory({ media_type: "text", text_content: textContent.trim(), background_color: bgColor });
-    setTextContent("");
-    setShowTextForm(false);
-    setPosting(false);
+    try {
+      await postStory({ media_type: "text", text_content: textContent.trim(), background_color: bgColor });
+      setTextContent("");
+      setShowTextForm(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not post status.");
+    } finally {
+      setPosting(false);
+    }
   };
 
   const handleViewMyStory = async (story: StatusStory) => {
@@ -68,8 +74,8 @@ export function StatusPage() {
 
   return (
     <div
-      className="flex flex-col relative overflow-hidden"
-      style={{ height: "100dvh", backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
+      className="flex flex-1 min-h-0 flex-col relative overflow-hidden"
+      style={{ backgroundColor: "var(--bg-main)", color: "var(--text-main)" }}
     >
       <header
         className="flex items-center gap-4 px-4 py-3 border-b shadow-sm"
