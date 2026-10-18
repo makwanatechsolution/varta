@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { databaseUrlOptions } from "./runtime-config.js";
 import dotenv from "dotenv";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
@@ -12,8 +13,7 @@ const __dirname = dirname(__filename);
 const connectionString = process.env.DATABASE_URL;
 const pool = connectionString
   ? new Pool({
-      connectionString,
-      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+      ...databaseUrlOptions(connectionString, process.env.DATABASE_SSL === "false"),
     })
   : new Pool({
       host: process.env.DB_HOST || "localhost",

@@ -1,9 +1,12 @@
 import { getMessaging } from 'firebase-admin/messaging';
 import type { Pool } from 'pg';
+import { pushCredentialsError } from './runtime-config.js';
 
 /** One display path (data messages), bounded batches, and expired-device cleanup. */
 export async function deliverPush(db: Pool, userIds: string[], data: Record<string, string>) {
   if (!userIds.length) return { sent: 0, failed: 0 };
+  const configurationError = pushCredentialsError(process.env);
+  if (configurationError) throw new Error(configurationError);
   const { rows } = await db.query('SELECT DISTINCT token FROM push_tokens WHERE user_id = ANY($1)', [userIds]);
   let sent = 0;
   let failed = 0;

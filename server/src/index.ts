@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { deliverPush } from "./push.js";
+import { databaseUrlOptions, appOrigin, pushCredentialsError } from "./runtime-config.js";
 import { createWriteStream, mkdirSync } from "fs";
 import { join } from "path";
 import multer from "multer";
@@ -21,33 +22,30 @@ const FIREBASE_PROJECT_ID =
   "chatapp-varta";
 
 if (!getApps().length) {
-  try {
-    const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (rawKey && rawKey.trim().startsWith("{")) {
-      const serviceAccount = JSON.parse(rawKey);
-      initializeApp({
-        credential: cert(serviceAccount),
-        projectId: FIREBASE_PROJECT_ID,
-      });
-      console.log("[Firebase Admin] Initialized with Service Account for project:", FIREBASE_PROJECT_ID);
-    } else {
-      initializeApp({ projectId: FIREBASE_PROJECT_ID });
-      console.log("[Firebase Admin] Initialized with Project ID:", FIREBASE_PROJECT_ID);
-    }
-  } catch (err) {
-    console.warn("[Firebase Admin] Service Account Init error, falling back to Project ID:", err);
+  const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
+  if (rawKey) {
     try {
-      initializeApp({ projectId: FIREBASE_PROJECT_ID });
-      console.log("[Firebase Admin] Fallback initialized with Project ID:", FIREBASE_PROJECT_ID);
-    } catch { /* already initialized */ }
+      const serviceAccount = JSON.parse(rawKey);
+      if (typeof serviceAccount.private_key === "string") serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+      initializeApp({ credential: cert(serviceAccount), projectId: FIREBASE_PROJECT_ID });
+      console.log("[Firebase Admin] Service account configured for project:", FIREBASE_PROJECT_ID);
+    } catch {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY is invalid. Supply the complete Firebase service-account JSON; no surrounding shell quotes.");
+    }
+  } else {
+    initializeApp({ projectId: FIREBASE_PROJECT_ID });
+    console.log("[Firebase Admin] Token verification configured for project:", FIREBASE_PROJECT_ID);
   }
 }
+const pushSetupError = pushCredentialsError(process.env);
+if (pushSetupError) console.warn("[Firebase Admin]", pushSetupError);
+const APP_ORIGIN = appOrigin(process.env.APP_URL, process.env.VITE_APP_URL);
+if (process.env.APP_URL === "*") console.warn("[Config] APP_URL must be a web origin, not '*'. Using:", APP_ORIGIN);
 
 // ─── PostgreSQL Pool ─────────────────────────────────────────────────────────
 const db = process.env.DATABASE_URL
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+      ...databaseUrlOptions(process.env.DATABASE_URL, process.env.DATABASE_SSL === "false"),
       max: 20,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
@@ -1136,7 +1134,7 @@ async function sendEmail(to: string, subject: string, html: string) {
 
 app.post("/api/notifyAdminSignup", async (req, res) => {
   const { userName } = req.body || {};
-  const appUrl = process.env.APP_URL || process.env.VITE_APP_URL || "http://localhost";
+  const appUrl = APP_ORIGIN;
   try {
     const adminEmail = process.env.ADMIN_EMAIL || "yash.makwana.b@gmail.com";
     await sendEmail(
@@ -1152,7 +1150,7 @@ app.post("/api/notifyAdminSignup", async (req, res) => {
 
 app.post("/api/notifyUserApproved", requireAuth, async (req, res) => {
   const { userId, name } = req.body || {};
-  const appUrl = process.env.APP_URL || process.env.VITE_APP_URL || "http://localhost";
+  const appUrl = APP_ORIGIN;
   try {
     const { rows } = await db.query("SELECT * FROM profiles WHERE id = $1", [userId]);
     if (!rows[0]) return res.status(404).json({ error: "User not found" });
@@ -1172,7 +1170,7 @@ app.post("/api/notifyUserApproved", requireAuth, async (req, res) => {
 
 app.post("/api/sendInviteEmail", async (req, res) => {
   const { inviteCode, inviterName, toEmail, customMessage } = req.body || {};
-  const appUrl = process.env.APP_URL || process.env.VITE_APP_URL || "https://varta.app";
+  const appUrl = APP_ORIGIN;
   const joinLink = `${appUrl}/join?token=${encodeURIComponent(inviteCode)}`;
   try {
     await sendEmail(
@@ -1212,5 +1210,5 @@ server.listen(PORT, () => {
   console.log(`[Varta Backend] Running on port ${PORT}`);
   console.log(`[WebSocket] WS server ready at /ws`);
   console.log(`[Cloud] Render Production Host Active`);
-  console.log(`[Domain] APP_URL = ${process.env.APP_URL || "https://api.chat.makwanatechsolution.in"}`);
+  console.log(`[Domain] APP_URL = ${APP_ORIGIN}`);
 });

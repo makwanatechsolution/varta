@@ -57,7 +57,7 @@ function deliveryHarness(count, failureCode) {
     if (sql.startsWith('DELETE')) { deleted.push(...args[0]); return { rows: [] }; }
     return { rows };
   } };
-  const context = vm.createContext({ console, getMessaging: () => ({ sendEachForMulticast: async message => {
+  const context = vm.createContext({ console, process: { env: {} }, pushCredentialsError: () => null, getMessaging: () => ({ sendEachForMulticast: async message => {
     batches.push(message);
     return { successCount: failureCode ? 0 : message.tokens.length, failureCount: failureCode ? message.tokens.length : 0, responses: message.tokens.map(() => failureCode ? { error: { code: failureCode } } : { success: true }) };
   } }) });
